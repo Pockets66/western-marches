@@ -14,8 +14,7 @@ These reference files are READ-ONLY. Do not modify them. The merged app lives in
 ## Architecture constraints
 - Single HTML file. All CSS inline in `<style>`, all JS inline in `<script>`.
 - Vanilla JS only. No frameworks, no build step, no npm, no bundler.
-- No external runtime dependencies except Google Fonts (already used by both reference files).
-- Must work when opened directly via `file://` in a browser. No server required.
+- No external runtime dependencies at all. Fonts are bundled locally in `fonts/`. The app must work fully offline from `file://`.
 - Persistence is `localStorage` under a single key: `wm_unified_v1`.
 
 ## Data model
@@ -24,7 +23,7 @@ that touch state shape. If a change requires altering the schema, update that do
 in the same commit.
 
 ## Style
-- Fonts: Cinzel (headings) and Crimson Pro (body) — already loaded from Google Fonts.
+- Fonts: Cinzel (headings) and Crimson Pro (body) — bundled locally in `fonts/`.
 - Color palette matches the reference files: dark parchment, gold accents, muted earth tones.
 - Reuse the CSS variables from the reference files where possible.
 

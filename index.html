@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Western Marches Tracker</title>
+<style>
+@font-face {
+  font-family: 'Cinzel'; font-weight: 400; font-style: normal; font-display: swap;
+  src: url('fonts/cinzel-v26-latin-regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Cinzel'; font-weight: 600; font-style: normal; font-display: swap;
+  src: url('fonts/cinzel-v26-latin-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Cinzel'; font-weight: 900; font-style: normal; font-display: swap;
+  src: url('fonts/cinzel-v26-latin-900.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Crimson Pro'; font-weight: 300; font-style: normal; font-display: swap;
+  src: url('fonts/crimson-pro-v28-latin-300.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Crimson Pro'; font-weight: 300; font-style: italic; font-display: swap;
+  src: url('fonts/crimson-pro-v28-latin-300italic.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Crimson Pro'; font-weight: 400; font-style: normal; font-display: swap;
+  src: url('fonts/crimson-pro-v28-latin-regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Crimson Pro'; font-weight: 400; font-style: italic; font-display: swap;
+  src: url('fonts/crimson-pro-v28-latin-italic.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Crimson Pro'; font-weight: 600; font-style: normal; font-display: swap;
+  src: url('fonts/crimson-pro-v28-latin-600.woff2') format('woff2');
+}
+
+:root {
+  --panel:      #1c1408;
+  --panel-mid:  #2a1e0e;
+  --panel-lite: #3a2c18;
+  --gold:       #c8972a;
+  --gold-dim:   #7a5c1a;
+  --gold-pale:  #e8c870;
+  --red:        #9a2020;
+  --red-dim:    #6a1515;
+  --green:      #2a6a30;
+  --blue:       #2a5080;
+  --purple:     #6a3a8a;
+  --border:     #4a3820;
+  --border-lit: #7a5c2a;
+  --text:       #e8dcc0;
+  --text-dim:   #a09070;
+  --text-muted: #706050;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--panel);
+  color: var(--text);
+  font-family: 'Crimson Pro', Georgia, serif;
+  font-size: 16px;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(200,151,42,0.06) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 40% at 10% 90%, rgba(154,32,32,0.04) 0%, transparent 60%);
+  pointer-events: none; z-index: 0;
+}
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 24px;
+  background: linear-gradient(180deg, #0a0804 0%, var(--panel) 100%);
+  border-bottom: 1px solid var(--border-lit);
+  flex-shrink: 0; position: relative; z-index: 10;
+}
+header h1 {
+  font-family: 'Cinzel', serif; font-size: 1.2rem; font-weight: 900;
+  color: var(--gold); letter-spacing: 0.15em; text-transform: uppercase;
+}
+.tab-bar { display: flex; gap: 4px; }
+.tab-btn {
+  font-family: 'Cinzel', serif; font-size: 0.72rem; letter-spacing: 0.1em;
+  text-transform: uppercase; padding: 6px 16px;
+  border: 1px solid var(--border); background: transparent;
+  color: var(--text-dim); cursor: pointer; transition: all 0.2s;
+}
+.tab-btn:hover { border-color: var(--gold-dim); color: var(--text); }
+.tab-btn.active { background: var(--gold-dim); border-color: var(--gold); color: var(--gold-pale); }
+.panels { flex: 1; overflow: hidden; position: relative; z-index: 1; min-height: 0; }
+.panel {
+  display: none;
+  height: 100%;
+  align-items: center; justify-content: center;
+  font-family: 'Cinzel', serif; font-size: 1.4rem;
+  color: var(--text-muted); letter-spacing: 0.2em; text-transform: uppercase;
+}
+.panel.active { display: flex; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Western Marches</h1>
+  <nav class="tab-bar">
+    <button class="tab-btn active" data-tab="map">Map</button>
+    <button class="tab-btn" data-tab="factions">Factions</button>
+    <button class="tab-btn" data-tab="rumors">Rumors</button>
+    <button class="tab-btn" data-tab="quests">Quests</button>
+    <button class="tab-btn" data-tab="relations">Relations</button>
+  </nav>
+</header>
+
+<div class="panels">
+  <div class="panel active" id="panel-map">[Map]</div>
+  <div class="panel" id="panel-factions">[Factions]</div>
+  <div class="panel" id="panel-rumors">[Rumors]</div>
+  <div class="panel" id="panel-quests">[Quests]</div>
+  <div class="panel" id="panel-relations">[Relations]</div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+
+const STORAGE_KEY = 'wm_unified_v1';
+
+let state = {
+  schemaVersion: 1,
+  factions:  [],
+  npcs:      [],
+  rumors:    [],
+  quests:    [],
+  events:    [],
+  hexes:     {},
+  pins:      [],
+  relations: {},
+  ui: {
+    activeTab:       'map',
+    activeFactionId: null,
+    activeQuestId:   null,
+    activeHexKey:    null,
+    rumorFilter:     '',
+    questFilter:     '',
+  },
+};
+
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+function save() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function load() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed.schemaVersion === 1) {
+      state = parsed;
+    }
+  } catch (e) {
+    console.warn('wm: failed to parse saved state', e);
+  }
+}
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tab);
+  });
+  document.querySelectorAll('.panel').forEach(panel => {
+    panel.classList.toggle('active', panel.id === 'panel-' + tab);
+  });
+  state.ui.activeTab = tab;
+  save();
+}
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+});
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+
+load();
+switchTab(state.ui.activeTab);
+</script>
+</body>
+</html>
