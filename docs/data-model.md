@@ -208,28 +208,45 @@ A pin's events:  `state.events.filter(e => e.pinIds.includes(pin.id))`
 
 Keyed by `sorted([factionIdA, factionIdB]).join("|")` in `state.relations`.
 
-Relation types follow the GURPS reaction table:
-
 ```js
 {
-  type: "disastrous"    // 0 or less on 3d6
-      | "very-bad"      // 1-3
-      | "bad"           // 4-6
-      | "poor"          // 7-9
-      | "neutral"       // 10-12
-      | "good"          // 13-15
-      | "very-good"     // 16-18
-      | "excellent"     // 19+
-      | "unknown"       // GM hasn't decided / unrevealed
-      | "secret",       // flag for relations hidden from players
+  type: "none"           // factions have never met / no relationship exists
+      | "unknown"        // relationship exists, GM hasn't decided the posture yet
+      | "mortal-enemies" // 3d6: 0 or less equivalent
+      | "sworn-enemies"  // 1-3
+      | "hostile"        // 4-6
+      | "tense"          // 7-9
+      | "neutral"        // 10-12
+      | "friendly"       // 13-15
+      | "allied"         // 16-18
+      | "sworn-allies",  // 19+
+  playersAware: boolean, // true = players know the true relationship
   note: string,
 }
 ```
 
-Note: "secret" is modeling a *visibility* concept inside the type enum for
-simplicity. If we later want to decouple (e.g., a Secret Alliance that's
-mechanically "good"), we promote `secret` to a separate boolean field. Flagged
-for future revision.
+Vocabulary note: the type values describe *long-term posture*, not an
+instantaneous reaction roll. The 3d6 equivalences are listed so the GM can
+translate quickly from GURPS reaction mechanics, but the semantics are
+ongoing political stance between two factions.
+
+Special states `none` and `unknown` are distinct:
+- **none**: no relationship exists (factions haven't interacted / don't know
+  each other).
+- **unknown**: a relationship exists but the GM hasn't decided the posture yet.
+  Use this as the default for new relations the GM hasn't touched.
+
+### Relation UI rules
+
+- When the user attempts to change the `type` on a relation where
+  `playersAware === true`, show a confirmation prompt of the form:
+  "The players know this relationship as *<current type>*. Changing it to
+  *<new type>* represents a narrative event (betrayal, alliance, reveal).
+  Proceed?"
+  The prompt must be dismissible. No confirmation is needed if
+  `playersAware === false`.
+- Toggling `playersAware` itself never prompts.
+- Changing `note` never prompts.
 
 ## Cascade rules
 
