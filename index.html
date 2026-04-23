@@ -95,15 +95,312 @@ header h1 {
 }
 .tab-btn:hover { border-color: var(--gold-dim); color: var(--text); }
 .tab-btn.active { background: var(--gold-dim); border-color: var(--gold); color: var(--gold-pale); }
+
+/* ── Panels shell ─────────────────────────────────────────────────────────── */
 .panels { flex: 1; overflow: hidden; position: relative; z-index: 1; min-height: 0; }
 .panel {
-  display: none;
-  height: 100%;
+  display: none; height: 100%;
   align-items: center; justify-content: center;
   font-family: 'Cinzel', serif; font-size: 1.4rem;
   color: var(--text-muted); letter-spacing: 0.2em; text-transform: uppercase;
 }
 .panel.active { display: flex; }
+/* Factions panel overrides the centered-placeholder defaults */
+#panel-factions { align-items: stretch; overflow: hidden;
+  font-size: inherit; letter-spacing: normal; text-transform: none; color: var(--text); }
+
+/* ── Sidebar ─────────────────────────────────────────────────────────────── */
+.sidebar {
+  width: 260px; flex-shrink: 0;
+  background: var(--panel-mid); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.sidebar-header {
+  padding: 14px 16px 10px; border-bottom: 1px solid var(--border);
+  font-family: 'Cinzel', serif; font-size: 0.7rem; letter-spacing: 0.15em;
+  text-transform: uppercase; color: var(--text-dim);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.sidebar-list { overflow-y: auto; flex: 1; padding: 8px 0; min-height: 0; }
+.sidebar-list::-webkit-scrollbar { width: 5px; }
+.sidebar-list::-webkit-scrollbar-track { background: var(--panel-mid); }
+.sidebar-list::-webkit-scrollbar-thumb { background: var(--border-lit); }
+.faction-item {
+  display: flex; align-items: center; gap: 10px; padding: 9px 16px;
+  cursor: pointer; transition: background 0.15s; border-left: 3px solid transparent;
+}
+.faction-item:hover { background: rgba(200,151,42,0.06); }
+.faction-item.active { background: rgba(200,151,42,0.1); border-left-color: var(--gold); }
+.faction-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.15); }
+.faction-item-name { font-size: 0.9rem; color: var(--text); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.threat-badge { font-size: 0.62rem; font-family: 'Cinzel', serif; letter-spacing: 0.05em; padding: 2px 5px; border: 1px solid; text-transform: uppercase; }
+
+/* ── Content pane ────────────────────────────────────────────────────────── */
+.f-content { flex: 1; overflow-y: scroll; padding: 24px; min-height: 0; }
+.f-content::-webkit-scrollbar { width: 8px; }
+.f-content::-webkit-scrollbar-track { background: var(--panel-mid); }
+.f-content::-webkit-scrollbar-thumb { background: var(--border-lit); }
+.f-content::-webkit-scrollbar-thumb:hover { background: var(--gold-dim); }
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  height: 100%; color: var(--text-muted); text-align: center; gap: 12px;
+}
+.empty-state .glyph { font-size: 3rem; opacity: 0.3; font-family: 'Cinzel', serif; }
+.empty-state p { font-size: 1rem; font-style: italic; }
+
+/* ── Faction card ────────────────────────────────────────────────────────── */
+.faction-card { max-width: 900px; }
+.faction-card-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; gap: 16px; }
+.faction-title-group { flex: 1; }
+.faction-name-input {
+  font-family: 'Cinzel', serif; font-size: 1.5rem; font-weight: 900;
+  color: var(--gold-pale); background: transparent; border: none;
+  border-bottom: 1px dashed var(--gold-dim); outline: none; width: 100%;
+  line-height: 1.1; margin-bottom: 6px;
+}
+.faction-name-input::placeholder { color: var(--text-muted); }
+.color-picker-row { display: flex; gap: 6px; align-items: center; margin-top: 8px; }
+.color-picker-row label { font-size: 0.7rem; letter-spacing: 0.1em; color: var(--text-dim); text-transform: uppercase; font-family: 'Cinzel', serif; }
+.color-swatch { width: 20px; height: 20px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; transition: transform 0.15s, border-color 0.15s; }
+.color-swatch:hover { transform: scale(1.2); }
+.color-swatch.selected { border-color: var(--text); transform: scale(1.15); }
+.threat-pill {
+  font-family: 'Cinzel', serif; font-size: 0.62rem; letter-spacing: 0.08em;
+  padding: 4px 10px; border: 1px solid; text-transform: uppercase;
+  cursor: pointer; transition: all 0.15s; opacity: 0.4;
+}
+.threat-pill:hover { opacity: 0.7; }
+.threat-pill.selected { opacity: 1; }
+.threat-pill.dormant   { border-color: var(--text-dim); color: var(--text-dim); }
+.threat-pill.dormant.selected   { background: var(--panel-lite); }
+.threat-pill.active    { border-color: #c8a030; color: #c8a030; }
+.threat-pill.active.selected    { background: rgba(200,160,48,0.12); }
+.threat-pill.disbanded { border-color: var(--red); color: var(--red); }
+.threat-pill.disbanded.selected { background: rgba(154,32,32,0.15); }
+.known-toggle {
+  display: flex; align-items: center; gap: 8px; margin-top: 10px;
+  font-size: 0.78rem; color: var(--text-dim); font-family: 'Cinzel', serif;
+  letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; user-select: none;
+}
+.toggle-track {
+  width: 34px; height: 18px; border-radius: 9px;
+  border: 1px solid var(--border-lit); background: var(--panel);
+  position: relative; transition: background 0.2s; flex-shrink: 0;
+}
+.toggle-track.on { background: var(--green); border-color: #5aaa60; }
+.toggle-thumb { position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--text-dim); transition: all 0.2s; }
+.toggle-track.on .toggle-thumb { left: 18px; background: #fff; }
+
+/* ── Sections ────────────────────────────────────────────────────────────── */
+.sections-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.section-full { grid-column: 1 / -1; }
+.section-box { background: var(--panel-mid); border: 1px solid var(--border); overflow: hidden; }
+.section-title {
+  font-family: 'Cinzel', serif; font-size: 0.67rem; letter-spacing: 0.15em;
+  text-transform: uppercase; color: var(--gold-dim); padding: 8px 12px;
+  background: rgba(0,0,0,0.2); border-bottom: 1px solid var(--border);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.section-textarea {
+  width: 100%; min-height: 90px; background: transparent; border: none; outline: none;
+  color: var(--text); font-family: 'Crimson Pro', Georgia, serif;
+  font-size: 0.95rem; line-height: 1.6; padding: 12px; resize: vertical;
+}
+.section-textarea::placeholder { color: var(--text-muted); font-style: italic; }
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+.btn-small {
+  font-family: 'Cinzel', serif; font-size: 0.6rem; letter-spacing: 0.1em;
+  text-transform: uppercase; padding: 3px 8px; background: transparent;
+  border: 1px solid var(--gold-dim); color: var(--gold-dim); cursor: pointer; transition: all 0.15s;
+}
+.btn-small:hover { border-color: var(--gold); color: var(--gold); }
+.btn-icon {
+  background: transparent; border: 1px solid var(--border); color: var(--text-dim);
+  width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; font-size: 0.9rem; transition: all 0.15s; flex-shrink: 0;
+}
+.btn-icon:hover { border-color: var(--red); color: var(--red); }
+.btn-danger {
+  font-family: 'Cinzel', serif; font-size: 0.68rem; letter-spacing: 0.1em;
+  text-transform: uppercase; padding: 7px 16px; background: transparent;
+  border: 1px solid var(--red-dim); color: var(--red); cursor: pointer; transition: all 0.2s;
+}
+.btn-danger:hover { background: var(--red-dim); }
+.card-actions { display: flex; gap: 8px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); justify-content: flex-end; }
+
+/* ── NPC cards ───────────────────────────────────────────────────────────── */
+.npc-cards { padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+.npc-card { background: rgba(0,0,0,0.2); border: 1px solid var(--border); padding: 10px; position: relative; }
+.npc-card-header { display: flex; gap: 8px; margin-bottom: 6px; align-items: center; padding-right: 30px; }
+.npc-input {
+  flex: 1; background: transparent; border: none; border-bottom: 1px solid var(--border);
+  color: var(--text); font-family: 'Cinzel', serif; font-size: 0.82rem; font-weight: 600;
+  padding: 3px 4px; outline: none; letter-spacing: 0.05em; transition: border-color 0.15s;
+}
+.npc-input:focus { border-bottom-color: var(--gold-dim); }
+.npc-input::placeholder { color: var(--text-muted); font-weight: 400; }
+.npc-role-input {
+  width: 130px; background: transparent; border: none; border-bottom: 1px solid var(--border);
+  color: var(--text-dim); font-family: 'Crimson Pro', Georgia, serif;
+  font-size: 0.85rem; font-style: italic; padding: 3px 4px; outline: none; transition: border-color 0.15s;
+}
+.npc-role-input:focus { border-bottom-color: var(--gold-dim); }
+.npc-role-input::placeholder { color: var(--text-muted); }
+.npc-notes {
+  width: 100%; background: transparent; border: none; outline: none;
+  color: var(--text-dim); font-family: 'Crimson Pro', Georgia, serif;
+  font-size: 0.88rem; line-height: 1.5; padding: 4px; resize: none; min-height: 38px;
+}
+.npc-notes::placeholder { color: var(--text-muted); font-style: italic; }
+.npc-del-btn {
+  position: absolute; top: 8px; right: 8px; background: transparent;
+  border: 1px solid var(--border); color: var(--text-dim);
+  width: 22px; height: 22px; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; font-size: 0.75rem; transition: all 0.15s;
+}
+.npc-del-btn:hover { border-color: var(--red); color: var(--red); }
+
+/* ── Agenda clock ────────────────────────────────────────────────────────── */
+.clock-section { padding: 14px; }
+.clock-row { display: flex; align-items: flex-start; gap: 20px; flex-wrap: wrap; }
+.clock-svg-wrap { flex-shrink: 0; }
+.clock-label-input {
+  width: 100%; background: transparent; border: none;
+  border-bottom: 1px dashed var(--border-lit); color: var(--text);
+  font-family: 'Crimson Pro', Georgia, serif; font-size: 0.95rem; font-style: italic;
+  padding: 4px 0; outline: none; margin-bottom: 10px;
+}
+.clock-label-input::placeholder { color: var(--text-muted); }
+.clock-label-input:focus { border-bottom-color: var(--gold-dim); }
+.clock-controls { display: flex; flex-direction: column; gap: 8px; }
+.clock-size-row { display: flex; gap: 4px; align-items: center; }
+.clock-size-label { font-family: 'Cinzel', serif; font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); margin-right: 4px; }
+.clock-size-btn {
+  font-family: 'Cinzel', serif; font-size: 0.62rem; padding: 3px 9px;
+  border: 1px solid var(--border); background: transparent; color: var(--text-dim);
+  cursor: pointer; transition: all 0.15s;
+}
+.clock-size-btn:hover { border-color: var(--gold-dim); color: var(--gold-pale); }
+.clock-size-btn.active { background: var(--panel-lite); border-color: var(--gold-dim); color: var(--gold-pale); }
+.clock-fill-row { display: flex; gap: 6px; align-items: center; }
+.btn-clock {
+  font-family: 'Cinzel', serif; font-size: 0.7rem; letter-spacing: 0.06em; padding: 5px 12px;
+  border: 1px solid var(--border); background: transparent; color: var(--text-dim);
+  cursor: pointer; transition: all 0.15s;
+}
+.btn-clock:hover { border-color: var(--gold); color: var(--gold); }
+.clock-count { font-family: 'Cinzel', serif; font-size: 0.8rem; color: var(--gold-pale); min-width: 40px; text-align: center; }
+.clock-consequence-input {
+  width: 100%; background: transparent; border: none; outline: none;
+  color: var(--text-dim); font-family: 'Crimson Pro', Georgia, serif;
+  font-size: 0.88rem; font-style: italic; line-height: 1.5;
+  padding: 8px 14px 10px; resize: none; min-height: 40px;
+  border-top: 1px dashed var(--border);
+}
+.clock-consequence-input::placeholder { color: var(--text-muted); }
+
+/* ── Profile section ────────────────────────────────────────────────────── */
+.profile-section { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.profile-row { display: flex; align-items: center; gap: 10px; }
+.profile-label { font-family: 'Cinzel', serif; font-size: 0.6rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted); min-width: 58px; flex-shrink: 0; }
+.profile-pills { display: flex; gap: 4px; flex-wrap: wrap; }
+.axis-pill {
+  font-family: 'Cinzel', serif; font-size: 0.62rem; letter-spacing: 0.08em;
+  padding: 4px 10px; border: 1px solid var(--border); text-transform: capitalize;
+  cursor: pointer; transition: all 0.15s; opacity: 0.45; color: var(--text-dim);
+}
+.axis-pill:hover { opacity: 0.75; border-color: var(--gold-dim); color: var(--text); }
+.axis-pill.selected { opacity: 1; background: var(--panel-lite); border-color: var(--gold-dim); color: var(--gold-pale); }
+
+/* ── Clock cards ─────────────────────────────────────────────────────────── */
+.clock-card { border-top: 1px solid var(--border); position: relative; }
+.clock-card:first-child { border-top: none; }
+
+/* ── Relations matrix ───────────────────────────────────────────────────── */
+#panel-relations {
+  overflow: auto; align-items: flex-start; justify-content: flex-start;
+  font-size: inherit; letter-spacing: normal; text-transform: none; color: var(--text); padding: 24px;
+}
+.rel-board { min-width: 500px; }
+.rel-board-header { margin-bottom: 18px; }
+.rel-board-title { font-family: 'Cinzel', serif; font-size: 1.3rem; font-weight: 900; color: var(--gold-pale); margin-bottom: 10px; }
+.rel-hint { font-family: 'Crimson Pro', serif; font-size: 0.85rem; color: var(--text-muted); font-style: italic; margin-bottom: 12px; }
+.rel-legend { display: flex; gap: 10px; flex-wrap: wrap; padding: 10px 14px; background: var(--panel-mid); border: 1px solid var(--border); margin-bottom: 16px; }
+.legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--text-dim); }
+.legend-dot { width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0; }
+.rel-matrix-wrap { overflow-x: auto; }
+.rel-matrix-wrap::-webkit-scrollbar { height: 5px; }
+.rel-matrix-wrap::-webkit-scrollbar-thumb { background: var(--border); }
+table.rel-table { border-collapse: collapse; }
+table.rel-table th, table.rel-table td { border: 1px solid var(--border); padding: 0; }
+.rel-th-corner { width: 130px; background: var(--panel-mid); }
+.rel-th {
+  padding: 8px 10px; font-family: 'Cinzel', serif; font-size: 0.62rem;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim);
+  background: var(--panel-mid); white-space: nowrap; max-width: 110px;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.rel-td-label {
+  padding: 8px 12px; font-family: 'Cinzel', serif; font-size: 0.62rem;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim);
+  background: var(--panel-mid); white-space: nowrap; min-width: 130px;
+}
+.rel-cell {
+  width: 96px; height: 56px; cursor: pointer; position: relative;
+  transition: filter 0.15s; user-select: none; vertical-align: middle;
+}
+.rel-cell:hover { filter: brightness(1.3); }
+.rel-cell.self {
+  background: repeating-linear-gradient(45deg, var(--panel) 0px, var(--panel) 4px, var(--panel-mid) 4px, var(--panel-mid) 8px);
+  cursor: default;
+}
+.rel-cell.self:hover { filter: none; }
+.rel-cell-inner {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  height: 100%; padding: 4px 20px 4px 6px;
+}
+.rel-cell-type { font-family: 'Cinzel', serif; font-size: 0.56rem; letter-spacing: 0.06em; text-transform: uppercase; line-height: 1.3; text-align: center; }
+.rel-cell-note { font-family: 'Crimson Pro', serif; font-size: 0.68rem; font-style: italic; color: rgba(255,255,255,0.45); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80px; }
+.rel-cell-pa {
+  position: absolute; bottom: 3px; left: 4px;
+  font-size: 0.65rem; cursor: pointer; line-height: 1; transition: opacity 0.15s;
+}
+.rel-cell-pa:hover { opacity: 1 !important; }
+.rel-note-btn {
+  position: absolute; bottom: 3px; right: 3px;
+  background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.15);
+  color: rgba(255,255,255,0.5); width: 17px; height: 17px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.6rem; cursor: pointer; border-radius: 2px;
+  opacity: 0; transition: opacity 0.15s;
+}
+.rel-cell:hover .rel-note-btn { opacity: 1; }
+
+/* ── Modals ──────────────────────────────────────────────────────────────── */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 200; display: flex; align-items: center; justify-content: center; }
+.modal-box { background: var(--panel-mid); border: 1px solid var(--gold-dim); padding: 20px; width: 400px; display: flex; flex-direction: column; gap: 12px; }
+.modal-title { font-family: 'Cinzel', serif; font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold-dim); }
+.modal-body { font-family: 'Crimson Pro', Georgia, serif; font-size: 0.95rem; line-height: 1.55; color: var(--text-dim); }
+.modal-body strong { color: var(--text); font-weight: 600; }
+.modal-textarea { width: 100%; min-height: 80px; background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: var(--text); font-family: 'Crimson Pro', Georgia, serif; font-size: 0.95rem; line-height: 1.6; padding: 10px; outline: none; resize: vertical; }
+.modal-textarea:focus { border-color: var(--gold-dim); }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.btn-modal-cancel { font-family: 'Cinzel', serif; font-size: 0.65rem; letter-spacing: 0.1em; text-transform: uppercase; padding: 6px 14px; background: transparent; border: 1px solid var(--border); color: var(--text-dim); cursor: pointer; }
+.btn-modal-cancel:hover { border-color: var(--text-dim); }
+.btn-modal-save { font-family: 'Cinzel', serif; font-size: 0.65rem; letter-spacing: 0.1em; text-transform: uppercase; padding: 6px 14px; background: var(--gold-dim); border: 1px solid var(--gold); color: var(--gold-pale); cursor: pointer; }
+.btn-modal-save:hover { background: var(--gold); color: #12100a; }
+
+/* ── Toast & utilities ───────────────────────────────────────────────────── */
+.toast {
+  position: fixed; bottom: 20px; right: 20px;
+  background: var(--panel-lite); border: 1px solid var(--gold-dim); color: var(--gold-pale);
+  font-family: 'Cinzel', serif; font-size: 0.75rem; letter-spacing: 0.1em;
+  padding: 10px 18px; z-index: 1000;
+  transform: translateY(60px); opacity: 0; transition: all 0.3s; pointer-events: none;
+}
+.toast.show { transform: translateY(0); opacity: 1; }
+.hidden { display: none !important; }
 </style>
 </head>
 <body>
@@ -111,7 +408,7 @@ header h1 {
 <header>
   <h1>Western Marches</h1>
   <nav class="tab-bar">
-    <button class="tab-btn active" data-tab="map">Map</button>
+    <button class="tab-btn" data-tab="map">Map</button>
     <button class="tab-btn" data-tab="factions">Factions</button>
     <button class="tab-btn" data-tab="rumors">Rumors</button>
     <button class="tab-btn" data-tab="quests">Quests</button>
@@ -120,14 +417,83 @@ header h1 {
 </header>
 
 <div class="panels">
-  <div class="panel active" id="panel-map">[Map]</div>
-  <div class="panel" id="panel-factions">[Factions]</div>
+  <div class="panel" id="panel-map">[Map]</div>
+
+  <div class="panel" id="panel-factions">
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <span>Factions</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span id="f-count" style="color:var(--text-muted)">0</span>
+          <button class="btn-small" onclick="newFaction()">+ New</button>
+        </div>
+      </div>
+      <div class="sidebar-list" id="f-list"></div>
+    </div>
+    <div class="f-content">
+      <div class="empty-state" id="f-empty">
+        <div class="glyph">✦</div>
+        <p>No factions yet. Create one to begin.</p>
+      </div>
+      <div id="f-detail" class="hidden"></div>
+    </div>
+  </div>
+
   <div class="panel" id="panel-rumors">[Rumors]</div>
   <div class="panel" id="panel-quests">[Quests]</div>
-  <div class="panel" id="panel-relations">[Relations]</div>
+  <div class="panel" id="panel-relations">
+    <div class="rel-board">
+      <div class="rel-board-header">
+        <div class="rel-board-title">Faction Relations</div>
+        <p class="rel-hint">Single-click a cell to cycle relation type · Double-click or ✎ to add a note · ⚑/◎ toggles player awareness</p>
+        <div class="rel-legend" id="rel-legend"></div>
+      </div>
+      <div id="rel-matrix"></div>
+    </div>
+  </div>
 </div>
 
+<!-- Note modal -->
+<div class="modal-overlay hidden" id="rel-note-modal">
+  <div class="modal-box">
+    <div class="modal-title" id="rel-note-title">Relation Note</div>
+    <textarea class="modal-textarea" id="rel-note-textarea" placeholder="Describe this relationship in more detail…"></textarea>
+    <div class="modal-actions">
+      <button class="btn-modal-cancel" onclick="closeRelNoteModal()">Cancel</button>
+      <button class="btn-modal-save" onclick="saveRelNoteModal()">Save Note</button>
+    </div>
+  </div>
+</div>
+
+<!-- Narrative-event confirmation modal -->
+<div class="modal-overlay hidden" id="rel-confirm-modal">
+  <div class="modal-box">
+    <div class="modal-title">Narrative Event</div>
+    <p class="modal-body" id="rel-confirm-body"></p>
+    <div class="modal-actions">
+      <button class="btn-modal-cancel" onclick="closeRelConfirmModal()">Cancel</button>
+      <button class="btn-modal-save" onclick="confirmRelChange()">Proceed</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
 <script>
+// ── Utilities ─────────────────────────────────────────────────────────────────
+
+function escHtml(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+let _toastTimer = null;
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+}
+
 // ── State ─────────────────────────────────────────────────────────────────────
 
 const STORAGE_KEY = 'wm_unified_v1';
@@ -166,11 +532,34 @@ function load() {
   try {
     const parsed = JSON.parse(raw);
     if (parsed.schemaVersion === 1) {
+      migrateFactions(parsed);
       state = parsed;
     }
   } catch (e) {
     console.warn('wm: failed to parse saved state', e);
   }
+}
+
+function migrateFactions(parsed) {
+  const activityMap = { dormant: 'dormant', rising: 'active', active: 'active', defeated: 'disbanded' };
+  (parsed.factions || []).forEach(f => {
+    if ('threat' in f || 'clock' in f) {
+      // Old schema: migrate threat → activity, clock → clocks[]
+      f.activity  = activityMap[f.threat] || 'dormant';
+      f.size      = f.size      || 'unknown';
+      f.alignment = f.alignment || { ethical: null, moral: null };
+      const old = f.clock || {};
+      f.clocks = [{ id: uid(), size: old.size || 6, filled: old.filled || 0, label: old.label || '', consequence: old.consequence || '' }];
+      delete f.threat;
+      delete f.clock;
+    } else {
+      // Already migrated — patch any missing fields defensively
+      f.activity  = f.activity  || 'dormant';
+      f.size      = f.size      || 'unknown';
+      f.alignment = f.alignment || { ethical: null, moral: null };
+      if (!Array.isArray(f.clocks)) f.clocks = [];
+    }
+  });
 }
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
@@ -184,16 +573,614 @@ function switchTab(tab) {
   });
   state.ui.activeTab = tab;
   save();
+  if (tab === 'relations') renderRelations();
 }
 
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => switchTab(btn.dataset.tab));
 });
 
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const FACTION_COLORS = [
+  '#c8972a','#9a2020','#2a5080','#2a6a30',
+  '#6a3a8a','#1a6a6a','#9a9070','#8a5a20',
+];
+const ACTIVITY_TYPES = [
+  { key: 'dormant',   label: 'Dormant',   color: '#706050' },
+  { key: 'active',    label: 'Active',    color: '#c8a030' },
+  { key: 'disbanded', label: 'Disbanded', color: '#9a2020' },
+];
+const SIZE_TYPES = [
+  { key: 'tiny',    label: 'Tiny',    hint: '<5 members' },
+  { key: 'small',   label: 'Small',   hint: '6–20 members' },
+  { key: 'medium',  label: 'Medium',  hint: '21–100 members' },
+  { key: 'large',   label: 'Large',   hint: '101–1000 members' },
+  { key: 'giant',   label: 'Giant',   hint: '1000+ members' },
+  { key: 'unknown', label: 'Unknown', hint: 'Undecided' },
+];
+const ETHICAL_TYPES = ['lawful', 'neutral', 'chaotic'];
+const MORAL_TYPES   = ['good', 'neutral', 'evil'];
+const CLOCK_SIZES   = [4, 6, 8, 10, 12];
+
+// ── Factions — Sidebar ────────────────────────────────────────────────────────
+
+function renderFactionSidebar() {
+  const list = document.getElementById('f-list');
+  document.getElementById('f-count').textContent = state.factions.length;
+  if (!state.factions.length) {
+    list.innerHTML = '<div style="padding:16px;color:var(--text-muted);font-size:0.85rem;font-style:italic;text-align:center">No factions yet</div>';
+    return;
+  }
+  list.innerHTML = state.factions.map(f => {
+    const at = ACTIVITY_TYPES.find(a => a.key === f.activity) || ACTIVITY_TYPES[0];
+    const active = f.id === state.ui.activeFactionId ? 'active' : '';
+    return `<div class="faction-item ${active}" onclick="selectFaction('${f.id}')">
+      <div class="faction-dot" style="background:${escHtml(f.color)}"></div>
+      <div class="faction-item-name">${f.name ? escHtml(f.name) : '<em style="color:var(--text-muted)">Unnamed</em>'}</div>
+      <div class="threat-badge" style="border-color:${at.color};color:${at.color}">${at.label}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Factions — CRUD ───────────────────────────────────────────────────────────
+
+function newFaction() {
+  const f = {
+    id: uid(), name: '',
+    color: FACTION_COLORS[state.factions.length % FACTION_COLORS.length],
+    alignment: { ethical: null, moral: null },
+    activity: 'dormant',
+    size: 'unknown',
+    goals: '', notes: '', playerKnown: false,
+    clocks: [],
+  };
+  state.factions.push(f);
+  state.ui.activeFactionId = f.id;
+  save(); renderFactionSidebar(); renderFactionDetail(f);
+  setTimeout(() => { const n = document.getElementById('f-name-input'); if (n) n.focus(); }, 50);
+}
+
+function selectFaction(id) {
+  state.ui.activeFactionId = id;
+  save(); renderFactionSidebar();
+  renderFactionDetail(state.factions.find(f => f.id === id));
+}
+
+function deleteFaction(id) {
+  if (!confirm('Delete this faction? Its NPCs will become independent (not deleted).')) return;
+  // Cascade: nullify factionId on all NPCs belonging to this faction
+  state.npcs.forEach(n => { if (n.factionId === id) n.factionId = null; });
+  // Cascade: remove all relations entries that involve this faction
+  Object.keys(state.relations).forEach(key => {
+    if (key.split('|').includes(id)) delete state.relations[key];
+  });
+  state.factions = state.factions.filter(f => f.id !== id);
+  if (state.ui.activeFactionId === id) state.ui.activeFactionId = null;
+  save(); renderFactionSidebar(); renderFactionDetail(null);
+  toast('Faction removed.');
+}
+
+// ── Factions — Field Mutations ────────────────────────────────────────────────
+
+function updateFactionField(id, field, val) {
+  const f = state.factions.find(f => f.id === id); if (!f) return;
+  f[field] = val;
+  if (field === 'name') renderFactionSidebar();
+  save();
+}
+
+function setFactionColor(id, color, el) {
+  const f = state.factions.find(f => f.id === id); if (!f) return;
+  f.color = color;
+  el.closest('.color-picker-row').querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+  el.classList.add('selected');
+  save(); renderFactionSidebar();
+}
+
+function setFactionActivity(id, val, el) {
+  const f = state.factions.find(f => f.id === id); if (!f) return;
+  f.activity = val;
+  el.closest('.profile-pills').querySelectorAll('.threat-pill').forEach(p => p.classList.remove('selected'));
+  el.classList.add('selected');
+  save(); renderFactionSidebar();
+}
+
+function setFactionSize(id, val, el) {
+  const f = state.factions.find(f => f.id === id); if (!f) return;
+  f.size = val;
+  el.closest('.profile-pills').querySelectorAll('.axis-pill').forEach(p => p.classList.remove('selected'));
+  el.classList.add('selected');
+  save();
+}
+
+function setFactionAlignment(id, axis, val, el) {
+  const f = state.factions.find(f => f.id === id); if (!f) return;
+  // Clicking the active pill deselects it (sets to null)
+  f.alignment[axis] = f.alignment[axis] === val ? null : val;
+  el.closest('.profile-pills').querySelectorAll('.axis-pill').forEach(p => p.classList.remove('selected'));
+  if (f.alignment[axis] !== null) el.classList.add('selected');
+  save();
+}
+
+function toggleFactionKnown(id) {
+  const f = state.factions.find(f => f.id === id); if (!f) return;
+  f.playerKnown = !f.playerKnown;
+  const tr = document.getElementById('f-toggle-' + id);
+  const lb = document.getElementById('f-toggle-label-' + id);
+  if (tr) tr.classList.toggle('on', f.playerKnown);
+  if (lb) {
+    lb.style.color = f.playerKnown ? '#c8a030' : 'var(--text-muted)';
+    lb.textContent = f.playerKnown ? 'Players know this faction' : 'Hidden from players';
+  }
+  save();
+}
+
+// ── Clock ─────────────────────────────────────────────────────────────────────
+
+function renderClockSVG(clock, color, clockId) {
+  const sz = clock.size || 6;
+  const fill = Math.max(0, Math.min(clock.filled || 0, sz));
+  const cx = 54, cy = 54, r = 44;
+  const segs = [];
+  for (let i = 0; i < sz; i++) {
+    const a1 = (i / sz) * 2 * Math.PI - Math.PI / 2;
+    const a2 = ((i + 1) / sz) * 2 * Math.PI - Math.PI / 2;
+    const x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1);
+    const x2 = cx + r * Math.cos(a2), y2 = cy + r * Math.sin(a2);
+    const lg = (1 / sz) > 0.5 ? 1 : 0;
+    const fc = i < fill ? color : '#1a1408';
+    const sc = i < fill ? color : '#4a3820';
+    segs.push(`<path d="M${cx},${cy} L${x1.toFixed(2)},${y1.toFixed(2)} A${r},${r} 0 ${lg},1 ${x2.toFixed(2)},${y2.toFixed(2)} Z" fill="${fc}" stroke="${sc}" stroke-width="2" style="cursor:pointer" onmouseenter="this.style.filter='brightness(1.35)'" onmouseleave="this.style.filter=''" onclick="stepClockSeg('${clockId}',${i})"/>`);
+  }
+  const pct = sz > 0 ? fill / sz : 0;
+  const tc = pct >= 0.75 ? '#ff6060' : pct >= 0.5 ? '#c8a030' : '#a09070';
+  return `<svg width="108" height="108" viewBox="0 0 108 108">
+    <circle cx="54" cy="54" r="46" fill="#12100a" stroke="#4a3820" stroke-width="1"/>
+    ${segs.join('')}
+    <circle cx="54" cy="54" r="18" fill="#12100a" stroke="#4a3820" stroke-width="1.5"/>
+    <text x="54" y="58" text-anchor="middle" font-family="Cinzel,serif" font-size="10" fill="${tc}">${fill}/${sz}</text>
+  </svg>`;
+}
+
+function updateClockDisplay(fid, clockId) {
+  const f = state.factions.find(f => f.id === fid); if (!f) return;
+  const clock = f.clocks.find(c => c.id === clockId); if (!clock) return;
+  const wrap  = document.getElementById('f-clock-svg-'   + clockId);
+  const count = document.getElementById('f-clock-count-' + clockId);
+  if (wrap)  wrap.innerHTML = renderClockSVG(clock, f.color, clockId);
+  if (count) count.textContent = clock.filled + '/' + clock.size;
+}
+
+function stepClock(fid, clockId, delta) {
+  const f = state.factions.find(f => f.id === fid); if (!f) return;
+  const clock = f.clocks.find(c => c.id === clockId); if (!clock) return;
+  clock.filled = Math.max(0, Math.min(clock.filled + delta, clock.size));
+  save(); updateClockDisplay(fid, clockId);
+  if (clock.filled >= clock.size) toast('Clock full — the agenda is complete!');
+}
+
+function stepClockSeg(clockId, segIdx) {
+  const f = state.factions.find(f => f.clocks.some(c => c.id === clockId)); if (!f) return;
+  const clock = f.clocks.find(c => c.id === clockId); if (!clock) return;
+  clock.filled = segIdx < clock.filled ? segIdx : segIdx + 1;
+  clock.filled = Math.max(0, Math.min(clock.filled, clock.size));
+  save(); updateClockDisplay(f.id, clockId);
+  if (clock.filled >= clock.size) toast('Clock full — the agenda is complete!');
+}
+
+function setClockSize(fid, clockId, size, btn) {
+  const f = state.factions.find(f => f.id === fid); if (!f) return;
+  const clock = f.clocks.find(c => c.id === clockId); if (!clock) return;
+  clock.size = size;
+  clock.filled = Math.min(clock.filled, size);
+  save();
+  btn.closest('.clock-size-row').querySelectorAll('.clock-size-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  updateClockDisplay(fid, clockId);
+}
+
+function updateClockField(fid, clockId, field, val) {
+  const f = state.factions.find(f => f.id === fid); if (!f) return;
+  const clock = f.clocks.find(c => c.id === clockId); if (!clock) return;
+  clock[field] = val; save();
+}
+
+// ── Clocks — Multi-clock support ─────────────────────────────────────────────
+
+function renderClockCard(f, clock) {
+  const szbtns = CLOCK_SIZES.map(s =>
+    `<button class="clock-size-btn ${clock.size === s ? 'active' : ''}"
+      onclick="setClockSize('${f.id}','${clock.id}',${s},this)">${s}</button>`
+  ).join('');
+  return `<div class="clock-card" id="f-clock-card-${clock.id}">
+    <button class="npc-del-btn" onclick="removeClock('${f.id}','${clock.id}')">✕</button>
+    <div class="clock-section">
+      <div class="clock-row">
+        <div class="clock-svg-wrap" id="f-clock-svg-${clock.id}">${renderClockSVG(clock, f.color, clock.id)}</div>
+        <div style="flex:1;min-width:200px">
+          <input class="clock-label-input" placeholder="What is this clock counting toward?…"
+            value="${escHtml(clock.label)}" oninput="updateClockField('${f.id}','${clock.id}','label',this.value)">
+          <div class="clock-controls">
+            <div class="clock-size-row"><span class="clock-size-label">Segments</span>${szbtns}</div>
+            <div class="clock-fill-row">
+              <button class="btn-clock" onclick="stepClock('${f.id}','${clock.id}',-1)">◀ Remove</button>
+              <span class="clock-count" id="f-clock-count-${clock.id}">${clock.filled}/${clock.size}</span>
+              <button class="btn-clock" onclick="stepClock('${f.id}','${clock.id}',1)">Advance ▶</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <textarea class="clock-consequence-input" placeholder="What catastrophe unfolds when the clock fills?…"
+        oninput="updateClockField('${f.id}','${clock.id}','consequence',this.value)">${escHtml(clock.consequence)}</textarea>
+    </div>
+  </div>`;
+}
+
+function addClock(fid) {
+  const f = state.factions.find(f => f.id === fid); if (!f) return;
+  const clock = { id: uid(), size: 6, filled: 0, label: '', consequence: '' };
+  f.clocks.push(clock); save();
+  const container = document.getElementById('f-clocks-' + fid); if (!container) return;
+  // Remove the empty-state paragraph if present
+  const empty = container.querySelector('p');
+  if (empty) empty.remove();
+  const el = document.createElement('div');
+  el.innerHTML = renderClockCard(f, clock);
+  container.appendChild(el.firstElementChild);
+}
+
+function removeClock(fid, clockId) {
+  const f = state.factions.find(f => f.id === fid); if (!f) return;
+  f.clocks = f.clocks.filter(c => c.id !== clockId); save();
+  const el = document.getElementById('f-clock-card-' + clockId); if (el) el.remove();
+  const container = document.getElementById('f-clocks-' + fid);
+  if (container && !f.clocks.length) {
+    container.innerHTML = '<p style="padding:12px 14px;color:var(--text-muted);font-style:italic;font-size:0.88rem">No clocks. Add one to track a faction agenda.</p>';
+  }
+}
+
+// ── NPCs ──────────────────────────────────────────────────────────────────────
+
+function renderNpcCard(npc) {
+  return `<div class="npc-card" id="f-npc-${npc.id}">
+    <button class="npc-del-btn" onclick="removeNpc('${npc.id}')">✕</button>
+    <div class="npc-card-header">
+      <input class="npc-input" placeholder="Name" value="${escHtml(npc.name)}"
+        oninput="updateNpc('${npc.id}','name',this.value)">
+      <input class="npc-role-input" placeholder="Role" value="${escHtml(npc.role)}"
+        oninput="updateNpc('${npc.id}','role',this.value)">
+    </div>
+    <textarea class="npc-notes" placeholder="Description, secrets, quirks…"
+      oninput="updateNpc('${npc.id}','notes',this.value)">${escHtml(npc.notes)}</textarea>
+  </div>`;
+}
+
+function addNpc(fid) {
+  const npc = { id: uid(), name: '', role: '', notes: '', factionId: fid, pinId: null };
+  state.npcs.push(npc); save();
+  const container = document.getElementById('f-npc-list-' + fid); if (!container) return;
+  const el = document.createElement('div');
+  el.innerHTML = renderNpcCard(npc);
+  container.appendChild(el.firstElementChild);
+  container.querySelector('#f-npc-' + npc.id + ' .npc-input').focus();
+}
+
+function updateNpc(npcId, field, val) {
+  const npc = state.npcs.find(n => n.id === npcId); if (!npc) return;
+  npc[field] = val; save();
+}
+
+function removeNpc(npcId) {
+  // Cascade placeholder: future slices will clear npcSourceId on rumors,
+  // giverNpcId on quests, and remove npcId from events.npcIds.
+  state.npcs = state.npcs.filter(n => n.id !== npcId); save();
+  const el = document.getElementById('f-npc-' + npcId); if (el) el.remove();
+}
+
+// ── Faction Detail View ───────────────────────────────────────────────────────
+
+function renderFactionDetail(f) {
+  const empty = document.getElementById('f-empty');
+  const detail = document.getElementById('f-detail');
+  if (!f) {
+    empty.classList.remove('hidden'); detail.classList.add('hidden'); detail.innerHTML = '';
+    return;
+  }
+  empty.classList.add('hidden'); detail.classList.remove('hidden');
+
+  const swatches = FACTION_COLORS.map(c =>
+    `<div class="color-swatch ${c === f.color ? 'selected' : ''}" style="background:${c}"
+      onclick="setFactionColor('${f.id}','${c}',this)"></div>`
+  ).join('');
+
+  const actPills = ACTIVITY_TYPES.map(a =>
+    `<div class="threat-pill ${a.key} ${f.activity === a.key ? 'selected' : ''}"
+      onclick="setFactionActivity('${f.id}','${a.key}',this)">${a.label}</div>`
+  ).join('');
+
+  const sizePills = SIZE_TYPES.map(s =>
+    `<div class="axis-pill ${f.size === s.key ? 'selected' : ''}"
+      title="${s.hint}" onclick="setFactionSize('${f.id}','${s.key}',this)">${s.label}</div>`
+  ).join('');
+
+  const ethPills = ETHICAL_TYPES.map(e =>
+    `<div class="axis-pill ${f.alignment.ethical === e ? 'selected' : ''}"
+      onclick="setFactionAlignment('${f.id}','ethical','${e}',this)">${e}</div>`
+  ).join('');
+
+  const morPills = MORAL_TYPES.map(m =>
+    `<div class="axis-pill ${f.alignment.moral === m ? 'selected' : ''}"
+      onclick="setFactionAlignment('${f.id}','moral','${m}',this)">${m}</div>`
+  ).join('');
+
+  const clocksHtml = f.clocks.length
+    ? f.clocks.map(clock => renderClockCard(f, clock)).join('')
+    : '<p style="padding:12px 14px;color:var(--text-muted);font-style:italic;font-size:0.88rem">No clocks. Add one to track a faction agenda.</p>';
+
+  detail.innerHTML = `<div class="faction-card">
+    <div class="faction-card-header">
+      <div class="faction-title-group">
+        <input class="faction-name-input" id="f-name-input" placeholder="Faction Name…"
+          value="${escHtml(f.name)}" oninput="updateFactionField('${f.id}','name',this.value)">
+        <div class="color-picker-row"><label>Color</label>${swatches}</div>
+        <div class="known-toggle" onclick="toggleFactionKnown('${f.id}')">
+          <div class="toggle-track ${f.playerKnown ? 'on' : ''}" id="f-toggle-${f.id}">
+            <div class="toggle-thumb"></div>
+          </div>
+          <span id="f-toggle-label-${f.id}" style="color:${f.playerKnown ? '#c8a030' : 'var(--text-muted)'}">
+            ${f.playerKnown ? 'Players know this faction' : 'Hidden from players'}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sections-grid">
+      <div class="section-box">
+        <div class="section-title">Goals &amp; Motivations</div>
+        <textarea class="section-textarea" placeholder="What do they want? What drives them?"
+          oninput="updateFactionField('${f.id}','goals',this.value)">${escHtml(f.goals)}</textarea>
+      </div>
+      <div class="section-box">
+        <div class="section-title">Notes</div>
+        <textarea class="section-textarea" placeholder="Secrets, weaknesses, anything else…"
+          oninput="updateFactionField('${f.id}','notes',this.value)">${escHtml(f.notes)}</textarea>
+      </div>
+
+      <div class="section-box section-full">
+        <div class="section-title">Profile</div>
+        <div class="profile-section">
+          <div class="profile-row">
+            <span class="profile-label">Activity</span>
+            <div class="profile-pills">${actPills}</div>
+          </div>
+          <div class="profile-row">
+            <span class="profile-label">Size</span>
+            <div class="profile-pills">${sizePills}</div>
+          </div>
+          <div class="profile-row">
+            <span class="profile-label">Ethical</span>
+            <div class="profile-pills">${ethPills}</div>
+          </div>
+          <div class="profile-row">
+            <span class="profile-label">Moral</span>
+            <div class="profile-pills">${morPills}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-box section-full">
+        <div class="section-title">
+          Agenda Clocks
+          <button class="btn-small" onclick="addClock('${f.id}')">+ Add Clock</button>
+        </div>
+        <div id="f-clocks-${f.id}">${clocksHtml}</div>
+      </div>
+
+      <div class="section-box section-full">
+        <div class="section-title">
+          Key NPCs
+          <button class="btn-small" onclick="addNpc('${f.id}')">+ Add NPC</button>
+        </div>
+        <div class="npc-cards" id="f-npc-list-${f.id}">
+          ${state.npcs.filter(n => n.factionId === f.id).map(n => renderNpcCard(n)).join('')}
+        </div>
+      </div>
+    </div>
+
+    <div class="card-actions">
+      <button class="btn-danger" onclick="deleteFaction('${f.id}')">Delete Faction</button>
+    </div>
+  </div>`;
+}
+
+// ── Relations — Constants ─────────────────────────────────────────────────────
+
+const REL_TYPES = [
+  { key: 'none',           label: 'None',           bg: '#1a1408', text: '#4a3820' },
+  { key: 'unknown',        label: 'Unknown',        bg: '#161828', text: '#5060a8' },
+  { key: 'mortal-enemies', label: 'Mortal Enemies', bg: '#4a0808', text: '#ff4040' },
+  { key: 'sworn-enemies',  label: 'Sworn Enemies',  bg: '#3a1010', text: '#cc3030' },
+  { key: 'hostile',        label: 'Hostile',        bg: '#3a1a08', text: '#cc6030' },
+  { key: 'tense',          label: 'Tense',          bg: '#2a2010', text: '#c8a030' },
+  { key: 'neutral',        label: 'Neutral',        bg: '#221c10', text: '#808060' },
+  { key: 'friendly',       label: 'Friendly',       bg: '#142014', text: '#60a860' },
+  { key: 'allied',         label: 'Allied',         bg: '#0e2810', text: '#5aaa60' },
+  { key: 'sworn-allies',   label: 'Sworn Allies',   bg: '#0a2a0a', text: '#80cc80' },
+];
+
+function relKey(a, b) { return [a, b].sort().join('|'); }
+
+function getRel(a, b) {
+  return state.relations[relKey(a, b)] || { type: 'unknown', playersAware: false, note: '' };
+}
+
+// ── Relations — Render ────────────────────────────────────────────────────────
+
+function renderRelations() {
+  const matrix = document.getElementById('rel-matrix');
+  const legend = document.getElementById('rel-legend');
+  if (!matrix) return;
+
+  if (state.factions.length < 2) {
+    matrix.innerHTML = '<p style="color:var(--text-muted);font-style:italic;padding-top:4px">Add at least two factions to see the relationship matrix.</p>';
+    if (legend) legend.innerHTML = '';
+    return;
+  }
+
+  if (legend) {
+    legend.innerHTML = REL_TYPES.map(r =>
+      `<div class="legend-item">
+        <div class="legend-dot" style="background:${r.bg};border:1px solid ${r.text}"></div>
+        <span style="color:${r.text}">${r.label}</span>
+      </div>`
+    ).join('');
+  }
+
+  const fs = state.factions;
+  let html = '<div class="rel-matrix-wrap"><table class="rel-table"><thead><tr><th class="rel-th-corner"></th>';
+  fs.forEach(f => {
+    html += `<th class="rel-th" title="${escHtml(f.name || 'Unnamed')}">
+      <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${escHtml(f.color)};margin-right:5px;vertical-align:middle"></span>${escHtml(f.name || 'Unnamed')}
+    </th>`;
+  });
+  html += '</tr></thead><tbody>';
+
+  fs.forEach(fa => {
+    html += `<tr><td class="rel-td-label">
+      <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${escHtml(fa.color)};margin-right:7px;vertical-align:middle"></span>${escHtml(fa.name || 'Unnamed')}
+    </td>`;
+    fs.forEach(fb => {
+      if (fa.id === fb.id) { html += '<td class="rel-cell self"></td>'; return; }
+      const rel = getRel(fa.id, fb.id);
+      const rt = REL_TYPES.find(r => r.key === rel.type) || REL_TYPES.find(r => r.key === 'unknown');
+      const paColor = rel.playersAware ? rt.text : 'var(--text-muted)';
+      const paOpacity = rel.playersAware ? '1' : '0.35';
+      const paIcon = rel.playersAware ? '⚑' : '◎';
+      const paTitle = rel.playersAware ? 'Players know — click to hide' : 'Players unaware — click to reveal';
+      html += `<td class="rel-cell" style="background:${rt.bg}"
+          onclick="handleRelClick('${fa.id}','${fb.id}')"
+          title="Click to cycle · Double-click for note">
+        <div class="rel-cell-inner">
+          <span class="rel-cell-type" style="color:${rt.text}">${rt.label}</span>
+          ${rel.note ? `<span class="rel-cell-note" title="${escHtml(rel.note)}">${escHtml(rel.note)}</span>` : ''}
+        </div>
+        <span class="rel-cell-pa" style="color:${paColor};opacity:${paOpacity}"
+          title="${paTitle}"
+          onclick="event.stopPropagation();toggleRelAware('${fa.id}','${fb.id}')">${paIcon}</span>
+        <button class="rel-note-btn"
+          onclick="event.stopPropagation();openRelNoteModal('${fa.id}','${fb.id}')">✎</button>
+      </td>`;
+    });
+    html += '</tr>';
+  });
+
+  html += '</tbody></table></div>';
+  matrix.innerHTML = html;
+}
+
+// ── Relations — Cell Interaction ──────────────────────────────────────────────
+
+let _relClickTimer = null;
+
+function handleRelClick(a, b) {
+  if (_relClickTimer) {
+    // Second click within 280 ms → treat as double-click, open note modal
+    clearTimeout(_relClickTimer); _relClickTimer = null;
+    openRelNoteModal(a, b);
+    return;
+  }
+  _relClickTimer = setTimeout(() => { _relClickTimer = null; doRelCycle(a, b); }, 280);
+}
+
+function doRelCycle(a, b) {
+  const key = relKey(a, b);
+  const rel = getRel(a, b);
+  const idx = REL_TYPES.findIndex(r => r.key === rel.type);
+  const next = REL_TYPES[(idx + 1) % REL_TYPES.length];
+
+  if (rel.playersAware) {
+    // Narrative-event confirmation required by data model
+    const curLabel = (REL_TYPES.find(r => r.key === rel.type) || {}).label || rel.type;
+    _relConfirmCb = () => commitRelType(key, rel, next.key);
+    document.getElementById('rel-confirm-body').innerHTML =
+      `The players know this relationship as <strong>${escHtml(curLabel)}</strong>. ` +
+      `Changing it to <strong>${escHtml(next.label)}</strong> represents a narrative event ` +
+      `(betrayal, alliance, reveal). Proceed?`;
+    document.getElementById('rel-confirm-modal').classList.remove('hidden');
+    return;
+  }
+  commitRelType(key, rel, next.key);
+}
+
+function commitRelType(key, rel, newType) {
+  state.relations[key] = { ...rel, type: newType };
+  save(); renderRelations();
+}
+
+let _relConfirmCb = null;
+function confirmRelChange() {
+  const cb = _relConfirmCb;
+  _relConfirmCb = null;
+  document.getElementById('rel-confirm-modal').classList.add('hidden');
+  if (cb) cb();
+}
+function closeRelConfirmModal() {
+  _relConfirmCb = null;
+  document.getElementById('rel-confirm-modal').classList.add('hidden');
+}
+
+// ── Relations — Player Awareness ──────────────────────────────────────────────
+
+function toggleRelAware(a, b) {
+  const key = relKey(a, b);
+  const rel = getRel(a, b);
+  state.relations[key] = { ...rel, playersAware: !rel.playersAware };
+  save(); renderRelations();
+}
+
+// ── Relations — Note Modal ────────────────────────────────────────────────────
+
+let _relNoteKey = null;
+
+function openRelNoteModal(a, b) {
+  _relNoteKey = relKey(a, b);
+  const rel = getRel(a, b);
+  const fa = state.factions.find(f => f.id === a);
+  const fb = state.factions.find(f => f.id === b);
+  document.getElementById('rel-note-title').textContent =
+    'Note: ' + (fa ? fa.name || 'Unnamed' : '?') + ' — ' + (fb ? fb.name || 'Unnamed' : '?');
+  document.getElementById('rel-note-textarea').value = rel.note || '';
+  document.getElementById('rel-note-modal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('rel-note-textarea').focus(), 50);
+}
+
+function closeRelNoteModal() {
+  _relNoteKey = null;
+  document.getElementById('rel-note-modal').classList.add('hidden');
+}
+
+function saveRelNoteModal() {
+  if (!_relNoteKey) return;
+  const val = document.getElementById('rel-note-textarea').value.trim();
+  const existing = state.relations[_relNoteKey] || { type: 'unknown', playersAware: false, note: '' };
+  state.relations[_relNoteKey] = { ...existing, note: val };
+  save(); closeRelNoteModal(); renderRelations();
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeRelNoteModal(); closeRelConfirmModal(); }
+});
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 load();
-switchTab(state.ui.activeTab);
+renderFactionSidebar();
+switchTab(state.ui.activeTab);  // calls renderRelations() if tab is 'relations'
+if (state.ui.activeFactionId) {
+  const f = state.factions.find(f => f.id === state.ui.activeFactionId);
+  if (f) renderFactionDetail(f);
+}
 </script>
 </body>
 </html>

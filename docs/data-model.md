@@ -62,21 +62,36 @@ Urgency = "low" | "medium" | "high" | "critical"
   id: string,
   name: string,
   color: string,               // hex, e.g. "#c8972a"
-  threat: "dormant" | "rising" | "active" | "defeated",
+  alignment: {
+    ethical: "lawful" | "neutral" | "chaotic" | null,
+    moral:   "good"   | "neutral" | "evil"    | null,
+  },
+  activity: "dormant" | "active" | "disbanded",
+  size: "tiny" | "small" | "medium" | "large" | "giant" | "unknown",
+  // size thresholds: tiny (<5), small (6–20), medium (21–100), large (101–1000), giant (1000+)
   goals: string,
   notes: string,
   playerKnown: boolean,
-  clock: {
-    size: 4 | 6 | 8 | 10 | 12,
-    filled: number,            // 0..size
-    label: string,
-    consequence: string,
-  },
+  clocks: [
+    {
+      id: string,
+      size: 4 | 6 | 8 | 10 | 12,
+      filled: number,          // 0..size
+      label: string,
+      consequence: string,
+    }
+  ],
 }
 ```
 
 Faction-level session history is no longer stored here. To get a faction's
 event history, filter `state.events` by `factionIds`.
+
+**Migration note (v1):** Old data may have `threat` and a single `clock` object.
+`migrateFactions()` in `load()` handles the upgrade automatically:
+- `threat` → `activity` (dormant→dormant, rising/active→active, defeated→disbanded)
+- `clock` → `clocks: [{ id, ...clock }]`
+- Adds `alignment: { ethical: null, moral: null }`, `size: "unknown"`
 
 ### NPC
 
