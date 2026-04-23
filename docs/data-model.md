@@ -13,26 +13,48 @@ The `v1` suffix is deliberate. If we ever need a breaking schema change, we writ
 a migration from `wm_unified_v1` to `wm_unified_v2` rather than silently
 corrupting existing data.
 
+## Migrations
+
+v2 → v3 (this update):
+- Add `state.players = []`, `state.sessions = []` if missing.
+- Ensure every event has `sessionId: null` and `playerKnown: false` as defaults.
+- Increment schemaVersion to 3.
+
+Incoming data from partner files (one-time import, not automatic):
+- `wm_sessions_v1` → read players into `state.players`, read sessions into
+  `state.sessions` (map the existing `planned`/`actual` fields, initialize
+  narrative-layer fields to empty).
+- `wm_explog_v1` → read expedition entries and merge them into matching sessions
+  by date/title where possible, or create new sessions with null `hooks`/`planned`
+  and populated narrative-layer fields.
+
+Import should be a deliberate user action, not automatic — see future slice.
+
 ## Top-level shape
 
 ```js
 state = {
-  schemaVersion: 1,
-  factions:  [Faction],
-  npcs:      [NPC],
-  rumors:    [Rumor],
-  quests:    [Quest],
-  events:    [Event],
-  hexes:     { "col,row": Hex },   // keyed by coord string
-  pins:      [Pin],
-  relations: { "factionIdA|factionIdB": Relation },  // sorted key
+  schemaVersion: 3,
+  factions:    [Faction],
+  npcs:        [NPC],
+  rumors:      [Rumor],
+  quests:      [Quest],
+  events:      [Event],
+  players:     [Player],    // NEW
+  sessions:    [Session],   // NEW — consolidates planned + actual + expedition narrative
+  hexes:       { "col,row": Hex },
+  pins:        [Pin],
+  relations:   { "factionIdA|factionIdB": Relation },
   ui: {
-    activeTab: "map" | "factions" | "rumors" | "quests" | "relations",
+    activeTab: "map" | "factions" | "rumors" | "quests" | "relations" | "sessions" | "players",
     activeFactionId: string | null,
     activeQuestId:   string | null,
-    activeHexKey:    string | null,   // "col,row"
-    rumorFilter: string,
-    questFilter: string,
+    activeSessionId: string | null,
+    activePlayerId:  string | null,
+    activeHexKey:    string | null,
+    rumorFilter:   string,
+    questFilter:   string,
+    sessionFilter: string,
   }
 }
 ```
@@ -54,6 +76,22 @@ Urgency = "low" | "medium" | "high" | "critical"
 ```
 
 ## Entities
+
+### Player
+```js
+{
+  id: string,
+  name: string,           // the real human's name (or handle)
+  character: string,      // the PC's in-game name
+  cls: string,            // character class / concept — free text
+  level: string,          // freeform (could be "5", "lvl 3 / 150 XP", whatever)
+  currentHexKey: string | null,  // "col,row" — validated against state.hexes
+  color: string,          // hex, for pips and chips in various UIs
+  prefs: string,          // freeform playstyle notes, favourite tactics
+  skills: string,         // freeform notable skills — GURPS or otherwise
+  loot: [string],         // freeform list of items/notes
+}
+```
 
 ### Faction
 
@@ -151,25 +189,61 @@ A quest's history is captured by events linked via `questId`.
 
 ### Event
 
-A thing that happened at a session, linkable to any combination of entities.
+A thing that happens NOT during a session, linkable to any combination of entities.
 
 ```js
 {
   id: string,
-  date: string,                // "Session 12", "1/15", whatever convention you use
+  date: string,                // "Session 12", "1/15", freeform
   text: string,
   urgency: Urgency,
-  factionIds: [string],        // zero or more
-  npcIds:     [string],
-  pinIds:     [string],
-  hexKeys:    [string],
-  questId:    string | null,
+  playerKnown: boolean,        // has this been revealed to players?
+  
+  // Links — any combination, all optional
+  factionIds:  [string],
+  npcIds:      [string],
+  pinIds:      [string],
+  hexKeys:     [string],
+  questId:     string | null,
+  sessionId:   string | null,  // NEW — if this happened during a session
 }
 ```
-
 Events replace the `interactions` array previously on factions and the `log`
 array previously on NPCs. "Faction X's history" is now a derived filter, not
 stored data.
+
+### Session
+
+```js
+{
+  id: string,
+  title: string,              // "Session 12" or a thematic title
+  date: string,               // freeform — "Jan 15", "2026-01-15", whatever
+  playerVisible: boolean,     // can the in-world report be shown to players?
+  
+  // Attendance: which players were present
+  attendance: { [playerId]: boolean },
+  
+  // PLANNING LAYER — filled in before the session
+  hooks: [{ text: string, source: string }],  // active hooks going in
+  planned: string,                             // what the GM prepared
+  
+  // PLAY LAYER — filled in during/after the session
+  actual: string,                              // quick actual-play notes (GM-facing)
+  
+  // NARRATIVE LAYER — the expedition-log style after-action record
+  location: string,                            // region / starting point — freeform
+  report: string,                              // in-world narrative, PC-perspective
+  gmNotes: string,                             // hidden GM analysis
+  
+  // TAGGED LISTS — optional free-text with autocomplete against real records
+  hexesVisited: [string],                      // each item is a hexKey OR free text
+  factionsEncountered: [{ text: string, sub: string }],  // text = name, sub = NPC name
+  loot:       [{ text: string, sub: string }],
+  casualties: [{ text: string, sub: string }],
+  misc:       [{ text: string, sub: string }],
+}
+```
 
 ### Hex
 
@@ -281,6 +355,11 @@ What happens when the user deletes an entity. Enforced in the delete handler.
 - **Delete rumor** → no cascade, it's a leaf.
 - **Clear a hex (terrain → unknown)** → does NOT delete pins. Pins remain
   tied to `hexKey` and stay visible. Deleting pins is always explicit.
+- **Delete player** → remove the player id from every session's `attendance` object.
+  Do NOT delete sessions. If an event's data includes the player by name (we don't
+  model this currently, but might later), flag for review.
+- **Delete session** → set `sessionId = null` on every event that referenced it.
+  Do NOT delete events — they happened.
 
 ## Derived views (computed, never stored)
 
@@ -295,6 +374,11 @@ What happens when the user deletes an entity. Enforced in the delete handler.
 - Quest → events: `events.filter(e => e.questId === q.id)`
 - Hex → faction influence: aggregate `factionId` over the hex's pins, pick
   dominant (for optional territory-tinting layer)
+- Session → events:    `events.filter(e => e.sessionId === s.id)`
+- Player → sessions:   `sessions.filter(s => s.attendance[p.id])`
+- Hex → players:       `players.filter(pl => pl.currentHexKey === key)`
+- Faction → sessions:  all sessions where this faction appears in `factionsEncountered`
+  (substring match on `text`, since it's free text for now)
 
 ## Out of scope for v1
 
@@ -303,4 +387,7 @@ What happens when the user deletes an entity. Enforced in the delete handler.
 - Change history beyond the events log
 - Tags, search indexing
 - Multiple campaigns in one file
-- Separate "faction reputation with PCs" tracking (only faction-to-faction for now)
+- Multiple characters per player (collapsed for now)
+- Per-PC character sheets (only free-text fields)
+- Automatic link resolution on session tagged lists (stays free text)
+- Import from partner files (deferred to its own slice)
