@@ -15,10 +15,19 @@ corrupting existing data.
 
 ## Migrations
 
-v2 → v3 (this update):
+v2 → v3:
 - Add `state.players = []`, `state.sessions = []` if missing.
 - Ensure every event has `sessionId: null` and `playerKnown: false` as defaults.
 - Increment schemaVersion to 3.
+
+v3 → v4 (this update):
+- For each player: rename `skills` → `notes` (GM notes field); delete `level`.
+- Add new fields (all `""`): `pointTotal`, `unspentPoints`, `st`, `dx`, `iq`, `ht`,
+  `hp`, `will`, `per`, `fp`, `basicSpeed`, `basicMove`, `dodge`, `parry`, `block`,
+  `dr`, `thrust`, `swing`, `advantages`, `disadvantages`, `skills`.
+- `relations` tab removed from top-level `ui.activeTab`; any persisted value of
+  `"relations"` is migrated to `"factions"` on load.
+- Increment schemaVersion to 4.
 
 Incoming data from partner files (one-time import, not automatic):
 - `wm_sessions_v1` → read players into `state.players`, read sessions into
@@ -34,7 +43,7 @@ Import should be a deliberate user action, not automatic — see future slice.
 
 ```js
 state = {
-  schemaVersion: 3,
+  schemaVersion: 4,
   factions:    [Faction],
   npcs:        [NPC],
   rumors:      [Rumor],
@@ -46,7 +55,7 @@ state = {
   pins:        [Pin],
   relations:   { "factionIdA|factionIdB": Relation },
   ui: {
-    activeTab: "map" | "factions" | "rumors" | "quests" | "relations" | "sessions" | "players",
+    activeTab: "map" | "factions" | "rumors" | "quests" | "sessions" | "players",
     activeFactionId: string | null,
     activeQuestId:   string | null,
     activeSessionId: string | null,
@@ -81,17 +90,46 @@ Urgency = "low" | "medium" | "high" | "critical"
 ```js
 {
   id: string,
-  name: string,           // the real human's name (or handle)
-  character: string,      // the PC's in-game name
-  cls: string,            // character class / concept — free text
-  level: string,          // freeform (could be "5", "lvl 3 / 150 XP", whatever)
-  currentHexKey: string | null,  // "col,row" — validated against state.hexes
-  color: string,          // hex, for pips and chips in various UIs
-  prefs: string,          // freeform playstyle notes, favourite tactics
-  skills: string,         // freeform notable skills — GURPS or otherwise
-  loot: [string],         // freeform list of items/notes
+  name: string,               // the real human's name (or handle)
+  character: string,          // the PC's in-game name
+  cls: string,                // profession / template — free text (UI label: "Profession / Template")
+  currentHexKey: string|null, // "col,row" — validated against state.hexes; invalid keys flagged in UI
+  color: string,              // hex color for sidebar dot and card accent
+  prefs: string,              // playstyle notes, favourite tactics
+
+  // GM-facing notes (was `skills` in v3; renamed to avoid collision with GURPS skills)
+  notes: string,
+
+  // Point accounting
+  pointTotal:    string,      // total character points (freeform)
+  unspentPoints: string,      // unspent points remaining
+
+  // Primary attributes (GURPS)
+  st: string, dx: string, iq: string, ht: string,
+
+  // Secondary characteristics
+  hp: string,         // default = ST
+  will: string,       // default = IQ
+  per: string,        // default = IQ
+  fp: string,         // default = HT
+  basicSpeed: string, // default = (HT+DX)/4
+  basicMove: string,  // default = floor(basicSpeed)
+
+  // Defenses & damage
+  dodge: string, parry: string, block: string, dr: string,
+  thrust: string, swing: string,
+
+  // Free-text lists (one entry per line)
+  advantages:    string,
+  disadvantages: string,
+  skills:        string,
+
+  loot: [string],   // freeform list of items/notes
 }
 ```
+
+All numeric fields are stored as strings. No auto-computation. Tier 2+ will add
+derived values and point-cost breakdowns.
 
 ### Faction
 

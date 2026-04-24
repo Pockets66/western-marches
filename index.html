@@ -106,8 +106,27 @@ header h1 {
 }
 .panel.active { display: flex; }
 /* Factions panel overrides the centered-placeholder defaults */
-#panel-factions { align-items: stretch; overflow: hidden;
+#panel-factions { flex-direction: column; align-items: stretch; overflow: hidden;
   font-size: inherit; letter-spacing: normal; text-transform: none; color: var(--text); }
+
+/* ── Factions sub-tabs ────────────────────────────────────────────────────── */
+.subtab-bar {
+  display: flex; padding: 0 12px;
+  background: var(--panel-mid); border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.subtab-btn {
+  font-family: 'Cinzel', serif; font-size: 0.6rem; letter-spacing: 0.1em;
+  text-transform: uppercase; padding: 7px 12px; background: transparent;
+  border: none; border-bottom: 2px solid transparent; color: var(--text-muted);
+  cursor: pointer; transition: all 0.2s; margin-bottom: -1px;
+}
+.subtab-btn:hover { color: var(--text); }
+.subtab-btn.active { color: var(--gold); border-bottom-color: var(--gold); }
+.factions-detail-pane { display: flex; flex: 1; overflow: hidden; align-items: stretch; min-height: 0; }
+.factions-rel-pane {
+  display: flex; flex: 1; overflow: auto; padding: 24px;
+  align-items: flex-start; justify-content: flex-start;
+}
 
 /* ── Sidebar ─────────────────────────────────────────────────────────────── */
 .sidebar {
@@ -318,10 +337,6 @@ header h1 {
 .clock-card:first-child { border-top: none; }
 
 /* ── Relations matrix ───────────────────────────────────────────────────── */
-#panel-relations {
-  overflow: auto; align-items: flex-start; justify-content: flex-start;
-  font-size: inherit; letter-spacing: normal; text-transform: none; color: var(--text); padding: 24px;
-}
 .rel-board { min-width: 500px; }
 .rel-board-header { margin-bottom: 18px; }
 .rel-board-title { font-family: 'Cinzel', serif; font-size: 1.3rem; font-weight: 900; color: var(--gold-pale); margin-bottom: 10px; }
@@ -392,24 +407,15 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
 .btn-modal-save:hover { background: var(--gold); color: #12100a; }
 
 /* ── Players panel ───────────────────────────────────────────────────────── */
-#panel-players {
-  overflow: auto; align-items: flex-start; justify-content: flex-start;
-  font-size: inherit; letter-spacing: normal; text-transform: none; color: var(--text); padding: 24px;
+#panel-players { align-items: stretch; overflow: hidden;
+  font-size: inherit; letter-spacing: normal; text-transform: none; color: var(--text); }
+.p-item {
+  display: flex; align-items: center; gap: 10px; padding: 9px 16px;
+  cursor: pointer; transition: background 0.15s; border-left: 3px solid transparent;
 }
-.players-board { min-width: 300px; width: 100%; }
-.roster-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; max-width: 1100px; }
-.player-card { background: var(--panel-mid); border: 1px solid var(--border); overflow: hidden; position: relative; transition: border-color 0.2s; }
-.player-card:hover { border-color: var(--border-lit); }
-.player-card-top { padding: 14px 14px 10px; border-left: 4px solid var(--border); transition: border-color 0.2s; }
-.player-name-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-.player-name-input {
-  flex: 1; font-family: 'Cinzel', serif; font-size: 1rem; font-weight: 600;
-  color: var(--gold-pale); background: transparent; border: none;
-  border-bottom: 1px dashed var(--gold-dim); outline: none; padding: 2px 0;
-}
-.player-name-input::placeholder { color: var(--text-muted); font-weight: 400; }
-.player-name-input:focus { border-bottom-color: var(--gold); }
-.player-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px; }
+.p-item:hover { background: rgba(200,151,42,0.06); }
+.p-item.active { background: rgba(200,151,42,0.1); border-left-color: var(--gold); }
+.p-item-name { font-size: 0.9rem; color: var(--text); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .field-group { display: flex; flex-direction: column; gap: 3px; }
 .field-label { font-family: 'Cinzel', serif; font-size: 0.58rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted); }
 .field-input {
@@ -422,14 +428,6 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
 .field-input.hex { font-family: 'Cinzel', serif; font-size: 0.8rem; letter-spacing: 0.05em; }
 .field-input.invalid { border-color: var(--red-dim); }
 .field-input.invalid:focus { border-color: var(--red); }
-.player-card-body { padding: 0 14px 14px; }
-.pref-textarea {
-  width: 100%; min-height: 52px; background: rgba(0,0,0,0.15); border: 1px solid var(--border);
-  border-top: none; outline: none; color: var(--text-dim); font-family: 'Crimson Pro', Georgia, serif;
-  font-size: 0.85rem; font-style: italic; line-height: 1.5; padding: 8px 10px; resize: none;
-}
-.pref-textarea::placeholder { color: var(--text-muted); }
-.pref-textarea:focus { border-color: var(--gold-dim); }
 .loot-list { padding: 8px 10px; display: flex; flex-direction: column; gap: 5px; }
 .loot-row { display: flex; gap: 6px; align-items: center; }
 .loot-input {
@@ -439,26 +437,15 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
 }
 .loot-input:focus { border-color: var(--gold-dim); }
 .loot-input::placeholder { color: var(--text-muted); }
-.color-dot-row { display: flex; gap: 5px; align-items: center; margin-bottom: 8px; }
-.cdot { width: 16px; height: 16px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; transition: transform 0.15s, border-color 0.15s; flex-shrink: 0; }
-.cdot:hover { transform: scale(1.2); }
-.cdot.selected { border-color: #fff; transform: scale(1.15); }
-.player-del-btn {
-  position: absolute; top: 8px; right: 8px; background: transparent;
-  border: 1px solid var(--border); color: var(--text-muted);
-  width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
-  cursor: pointer; font-size: 0.7rem; transition: all 0.15s;
-}
-.player-del-btn:hover { border-color: var(--red); color: var(--red); }
-.add-player-card {
-  background: transparent; border: 1px dashed var(--border);
-  display: flex; align-items: center; justify-content: center; min-height: 180px;
-  cursor: pointer; transition: all 0.2s; color: var(--text-muted);
-  font-family: 'Cinzel', serif; font-size: 0.75rem; letter-spacing: 0.15em;
-  text-transform: uppercase; flex-direction: column; gap: 8px;
-}
-.add-player-card:hover { border-color: var(--gold-dim); color: var(--gold-dim); background: rgba(200,151,42,0.04); }
-.add-player-card .plus { font-size: 1.8rem; opacity: 0.4; }
+
+/* ── Character sheet ─────────────────────────────────────────────────────── */
+.char-sheet { max-width: 860px; }
+.char-row { display: flex; gap: 12px; padding: 12px; flex-wrap: wrap; align-items: flex-start; }
+.char-cols { display: grid; grid-template-columns: 1fr 1fr; }
+.char-col { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.char-col + .char-col { border-left: 1px solid var(--border); }
+.char-narrow { width: 80px !important; }
+.char-hint { font-family: 'Crimson Pro', serif; font-size: 0.72rem; color: var(--text-muted); font-style: italic; margin-top: 1px; }
 
 /* ── Toast & utilities ───────────────────────────────────────────────────── */
 .toast {
@@ -481,7 +468,6 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
     <button class="tab-btn" data-tab="factions">Factions</button>
     <button class="tab-btn" data-tab="rumors">Rumors</button>
     <button class="tab-btn" data-tab="quests">Quests</button>
-    <button class="tab-btn" data-tab="relations">Relations</button>
     <button class="tab-btn" data-tab="players">Players</button>
   </nav>
 </header>
@@ -490,45 +476,58 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
   <div class="panel" id="panel-map">[Map]</div>
 
   <div class="panel" id="panel-factions">
-    <div class="sidebar">
-      <div class="sidebar-header">
-        <span>Factions</span>
-        <div style="display:flex;gap:8px;align-items:center">
-          <span id="f-count" style="color:var(--text-muted)">0</span>
-          <button class="btn-small" onclick="newFaction()">+ New</button>
-        </div>
-      </div>
-      <div class="sidebar-list" id="f-list"></div>
+    <div class="subtab-bar">
+      <button class="subtab-btn active" data-subtab="detail" onclick="switchFactionsSubtab('detail')">Detail</button>
+      <button class="subtab-btn" data-subtab="relations" onclick="switchFactionsSubtab('relations')">Relations</button>
     </div>
-    <div class="f-content">
-      <div class="empty-state" id="f-empty">
-        <div class="glyph">✦</div>
-        <p>No factions yet. Create one to begin.</p>
+    <div class="factions-detail-pane" id="factions-detail-pane">
+      <div class="sidebar">
+        <div class="sidebar-header">
+          <span>Factions</span>
+          <div style="display:flex;gap:8px;align-items:center">
+            <span id="f-count" style="color:var(--text-muted)">0</span>
+            <button class="btn-small" onclick="newFaction()">+ New</button>
+          </div>
+        </div>
+        <div class="sidebar-list" id="f-list"></div>
       </div>
-      <div id="f-detail" class="hidden"></div>
+      <div class="f-content">
+        <div class="empty-state" id="f-empty">
+          <div class="glyph">✦</div>
+          <p>No factions yet. Create one to begin.</p>
+        </div>
+        <div id="f-detail" class="hidden"></div>
+      </div>
+    </div>
+    <div class="factions-rel-pane hidden" id="factions-rel-pane">
+      <div class="rel-board">
+        <div class="rel-board-header">
+          <div class="rel-board-title">Faction Relations</div>
+          <p class="rel-hint">Single-click a cell to cycle relation type · Double-click or ✎ to add a note · ⚑/◎ toggles player awareness</p>
+          <div class="rel-legend" id="rel-legend"></div>
+        </div>
+        <div id="rel-matrix"></div>
+      </div>
     </div>
   </div>
 
   <div class="panel" id="panel-rumors">[Rumors]</div>
   <div class="panel" id="panel-quests">[Quests]</div>
-  <div class="panel" id="panel-relations">
-    <div class="rel-board">
-      <div class="rel-board-header">
-        <div class="rel-board-title">Faction Relations</div>
-        <p class="rel-hint">Single-click a cell to cycle relation type · Double-click or ✎ to add a note · ⚑/◎ toggles player awareness</p>
-        <div class="rel-legend" id="rel-legend"></div>
-      </div>
-      <div id="rel-matrix"></div>
-    </div>
-  </div>
 
   <div class="panel" id="panel-players">
-    <div class="players-board">
-      <div class="rel-board-header">
-        <div class="rel-board-title">Player Roster</div>
-        <p class="rel-hint">One card per player. Current Hex validation activates once the map is built — unknown keys are flagged in red but still saved.</p>
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <span>Players</span>
+        <button class="btn-small" onclick="newPlayer()">+ Add</button>
       </div>
-      <div class="roster-grid" id="roster-grid"></div>
+      <div class="sidebar-list" id="p-list"></div>
+    </div>
+    <div class="f-content">
+      <div class="empty-state" id="p-empty">
+        <div class="glyph">✦</div>
+        <p>Select a player or add one to begin.</p>
+      </div>
+      <div id="p-detail" class="hidden"></div>
     </div>
   </div>
 </div>
@@ -579,7 +578,7 @@ function toast(msg) {
 const STORAGE_KEY = 'wm_unified_v1';
 
 let state = {
-  schemaVersion: 3,
+  schemaVersion: 4,
   factions:  [],
   npcs:      [],
   rumors:    [],
@@ -617,10 +616,12 @@ function load() {
   try {
     const parsed = JSON.parse(raw);
     const v = parsed.schemaVersion || 1;
-    if (v <= 3) {
-      if (v < 2) migrateFactions(parsed);  // threat/clock → alignment/activity/size/clocks[]
-      if (v < 3) migrateToV3(parsed);      // add players/sessions, patch events
+    if (v <= 4) {
+      if (v < 2) migrateFactions(parsed);
+      if (v < 3) migrateToV3(parsed);
+      if (v < 4) migrateToV4(parsed);
       state = parsed;
+      if (state.ui && state.ui.activeTab === 'relations') state.ui.activeTab = 'factions';
     }
   } catch (e) {
     console.warn('wm: failed to parse saved state', e);
@@ -637,11 +638,29 @@ function migrateToV3(parsed) {
   parsed.schemaVersion = 3;
 }
 
+function migrateToV4(parsed) {
+  const v4Fields = [
+    'pointTotal','unspentPoints',
+    'st','dx','iq','ht',
+    'hp','will','per','fp','basicSpeed','basicMove',
+    'dodge','parry','block','dr','thrust','swing',
+    'advantages','disadvantages','skills',
+  ];
+  (parsed.players || []).forEach(p => {
+    // Rename old freeform skills field → notes (GM notes)
+    if (!('notes' in p)) p.notes = p.skills || '';
+    delete p.skills;
+    delete p.level;
+    // Add new v4 fields
+    v4Fields.forEach(f => { if (!(f in p)) p[f] = ''; });
+  });
+  parsed.schemaVersion = 4;
+}
+
 function migrateFactions(parsed) {
   const activityMap = { dormant: 'dormant', rising: 'active', active: 'active', defeated: 'disbanded' };
   (parsed.factions || []).forEach(f => {
     if ('threat' in f || 'clock' in f) {
-      // Old schema: migrate threat → activity, clock → clocks[]
       f.activity  = activityMap[f.threat] || 'dormant';
       f.size      = f.size      || 'unknown';
       f.alignment = f.alignment || { ethical: null, moral: null };
@@ -650,7 +669,6 @@ function migrateFactions(parsed) {
       delete f.threat;
       delete f.clock;
     } else {
-      // Already migrated — patch any missing fields defensively
       f.activity  = f.activity  || 'dormant';
       f.size      = f.size      || 'unknown';
       f.alignment = f.alignment || { ethical: null, moral: null };
@@ -670,13 +688,32 @@ function switchTab(tab) {
   });
   state.ui.activeTab = tab;
   save();
-  if (tab === 'relations') renderRelations();
-  if (tab === 'players')   renderRoster();
+  if (tab === 'players') {
+    renderPlayerSidebar();
+    if (state.ui.activePlayerId) {
+      const p = state.players.find(p => p.id === state.ui.activePlayerId);
+      if (p) renderPlayerDetail(p);
+    }
+  }
 }
 
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => switchTab(btn.dataset.tab));
 });
+
+// ── Factions sub-tabs ─────────────────────────────────────────────────────────
+
+let _factionsSubtab = 'detail';
+
+function switchFactionsSubtab(sub) {
+  _factionsSubtab = sub;
+  document.querySelectorAll('.subtab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.subtab === sub);
+  });
+  document.getElementById('factions-detail-pane').classList.toggle('hidden', sub !== 'detail');
+  document.getElementById('factions-rel-pane').classList.toggle('hidden', sub !== 'relations');
+  if (sub === 'relations') renderRelations();
+}
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -747,9 +784,7 @@ function selectFaction(id) {
 
 function deleteFaction(id) {
   if (!confirm('Delete this faction? Its NPCs will become independent (not deleted).')) return;
-  // Cascade: nullify factionId on all NPCs belonging to this faction
   state.npcs.forEach(n => { if (n.factionId === id) n.factionId = null; });
-  // Cascade: remove all relations entries that involve this faction
   Object.keys(state.relations).forEach(key => {
     if (key.split('|').includes(id)) delete state.relations[key];
   });
@@ -794,7 +829,6 @@ function setFactionSize(id, val, el) {
 
 function setFactionAlignment(id, axis, val, el) {
   const f = state.factions.find(f => f.id === id); if (!f) return;
-  // Clicking the active pill deselects it (sets to null)
   f.alignment[axis] = f.alignment[axis] === val ? null : val;
   el.closest('.profile-pills').querySelectorAll('.axis-pill').forEach(p => p.classList.remove('selected'));
   if (f.alignment[axis] !== null) el.classList.add('selected');
@@ -920,7 +954,6 @@ function addClock(fid) {
   const clock = { id: uid(), size: 6, filled: 0, label: '', consequence: '' };
   f.clocks.push(clock); save();
   const container = document.getElementById('f-clocks-' + fid); if (!container) return;
-  // Remove the empty-state paragraph if present
   const empty = container.querySelector('p');
   if (empty) empty.remove();
   const el = document.createElement('div');
@@ -970,8 +1003,6 @@ function updateNpc(npcId, field, val) {
 }
 
 function removeNpc(npcId) {
-  // Cascade placeholder: future slices will clear npcSourceId on rumors,
-  // giverNpcId on quests, and remove npcId from events.npcIds.
   state.npcs = state.npcs.filter(n => n.id !== npcId); save();
   const el = document.getElementById('f-npc-' + npcId); if (el) el.remove();
 }
@@ -1092,105 +1123,72 @@ function renderFactionDetail(f) {
   </div>`;
 }
 
-// ── Players ───────────────────────────────────────────────────────────────────
+// ── Players — Constants ───────────────────────────────────────────────────────
 
 const PLAYER_COLORS = [
   '#c8972a','#9a2020','#2a5080','#2a6a30',
   '#6a3a8a','#1a6a6a','#9a9070','#8a5a20',
 ];
 
-function renderPlayerCard(p) {
-  const dots = PLAYER_COLORS.map(c =>
-    `<div class="cdot ${c === p.color ? 'selected' : ''}" style="background:${c}"
-      onclick="setPlayerColor('${p.id}','${c}',this)"></div>`
-  ).join('');
+// ── Players — Sidebar ─────────────────────────────────────────────────────────
 
-  const hexVal = p.currentHexKey || '';
-  const hexInvalid = hexVal && !state.hexes[hexVal];
-  const hexTitle = hexInvalid ? `Hex "${hexVal}" not found on map yet` : '';
-
-  const lootRows = (p.loot || []).map((item, i) =>
-    `<div class="loot-row">
-      <input class="loot-input" placeholder="Item or note…" value="${escHtml(item)}"
-        oninput="updateLoot('${p.id}',${i},this.value)">
-      <button class="btn-icon" onclick="removeLoot('${p.id}',${i})">✕</button>
-    </div>`
-  ).join('');
-
-  return `<div class="player-card" data-id="${p.id}">
-    <button class="player-del-btn" onclick="deletePlayer('${p.id}')">✕</button>
-    <div class="player-card-top" style="border-left-color:${escHtml(p.color)}">
-      <div class="color-dot-row">${dots}</div>
-      <div class="player-name-row">
-        <input class="player-name-input" id="pname-${p.id}" placeholder="Player name…"
-          value="${escHtml(p.name)}" oninput="updatePlayer('${p.id}','name',this.value)">
-      </div>
-      <div class="player-fields">
-        <div class="field-group">
-          <div class="field-label">Character</div>
-          <input class="field-input" placeholder="PC name…" value="${escHtml(p.character)}"
-            oninput="updatePlayer('${p.id}','character',this.value)">
-        </div>
-        <div class="field-group">
-          <div class="field-label">Class / Concept</div>
-          <input class="field-input" placeholder="Class…" value="${escHtml(p.cls)}"
-            oninput="updatePlayer('${p.id}','cls',this.value)">
-        </div>
-        <div class="field-group">
-          <div class="field-label">Level / XP</div>
-          <input class="field-input" placeholder="e.g. 5 / 450 XP" value="${escHtml(p.level)}"
-            oninput="updatePlayer('${p.id}','level',this.value)">
-        </div>
-        <div class="field-group">
-          <div class="field-label">Current Hex</div>
-          <input class="field-input hex ${hexInvalid ? 'invalid' : ''}"
-            placeholder="col,row — e.g. 4,12" title="${escHtml(hexTitle)}"
-            value="${escHtml(hexVal)}"
-            oninput="updatePlayerHex('${p.id}',this.value,this)">
-        </div>
-      </div>
-    </div>
-    <div class="player-card-body">
-      <div class="section-title">Playstyle Preferences</div>
-      <textarea class="pref-textarea" placeholder="Favourite tactics, roleplay style, what they love doing…"
-        oninput="updatePlayer('${p.id}','prefs',this.value)">${escHtml(p.prefs)}</textarea>
-      <div class="section-title">Notable Skills</div>
-      <textarea class="pref-textarea" placeholder="Key skills, abilities, advantages…"
-        oninput="updatePlayer('${p.id}','skills',this.value)">${escHtml(p.skills)}</textarea>
-      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
-        Loot &amp; Notable Items
-        <button class="btn-small" onclick="addLoot('${p.id}')">+ Add</button>
-      </div>
-      <div class="loot-list" id="loot-${p.id}">${lootRows}</div>
-    </div>
-  </div>`;
+function renderPlayerSidebar() {
+  const list = document.getElementById('p-list'); if (!list) return;
+  if (!state.players.length) {
+    list.innerHTML = '<div style="padding:16px;color:var(--text-muted);font-size:0.85rem;font-style:italic;text-align:center">No players yet</div>';
+    return;
+  }
+  list.innerHTML = state.players.map(p => {
+    const active = p.id === state.ui.activePlayerId ? 'active' : '';
+    const label = p.name || p.character || '';
+    return `<div class="p-item ${active}" data-player-id="${p.id}" onclick="selectPlayer('${p.id}')">
+      <div class="faction-dot" style="background:${escHtml(p.color)}"></div>
+      <div class="p-item-name">${label ? escHtml(label) : '<em style="color:var(--text-muted)">Unnamed</em>'}</div>
+    </div>`;
+  }).join('');
 }
 
-function renderRoster() {
-  const grid = document.getElementById('roster-grid'); if (!grid) return;
-  grid.innerHTML = state.players.map(p => renderPlayerCard(p)).join('') +
-    `<div class="add-player-card" onclick="newPlayer()"><div class="plus">+</div><span>Add Player</span></div>`;
+function selectPlayer(id) {
+  state.ui.activePlayerId = id;
+  save(); renderPlayerSidebar();
+  renderPlayerDetail(state.players.find(p => p.id === id));
 }
+
+// ── Players — CRUD ────────────────────────────────────────────────────────────
 
 function newPlayer() {
   const p = {
-    id: uid(), name: '', character: '', cls: '', level: '',
+    id: uid(), name: '', character: '', cls: '',
     currentHexKey: null,
     color: PLAYER_COLORS[state.players.length % PLAYER_COLORS.length],
-    prefs: '', skills: '', loot: [],
+    prefs: '', notes: '', loot: [],
+    pointTotal: '', unspentPoints: '',
+    st: '', dx: '', iq: '', ht: '',
+    hp: '', will: '', per: '', fp: '',
+    basicSpeed: '', basicMove: '',
+    dodge: '', parry: '', block: '', dr: '',
+    thrust: '', swing: '',
+    advantages: '', disadvantages: '', skills: '',
   };
-  state.players.push(p); save(); renderRoster();
+  state.players.push(p);
+  state.ui.activePlayerId = p.id;
+  save(); renderPlayerSidebar(); renderPlayerDetail(p);
   setTimeout(() => { const n = document.getElementById('pname-' + p.id); if (n) n.focus(); }, 50);
 }
 
 function deletePlayer(id) {
+  if (!confirm('Delete this player?')) return;
   state.players = state.players.filter(p => p.id !== id);
-  save(); renderRoster(); toast('Player removed.');
+  if (state.ui.activePlayerId === id) state.ui.activePlayerId = null;
+  save(); renderPlayerSidebar(); renderPlayerDetail(null);
+  toast('Player removed.');
 }
 
-function updatePlayer(id, field, val) {
+function updatePlayerField(id, field, val) {
   const p = state.players.find(p => p.id === id); if (!p) return;
-  p[field] = val; save();
+  p[field] = val;
+  if (field === 'name' || field === 'character') renderPlayerSidebar();
+  save();
 }
 
 function updatePlayerHex(id, val, el) {
@@ -1205,10 +1203,10 @@ function updatePlayerHex(id, val, el) {
 function setPlayerColor(id, color, el) {
   const p = state.players.find(p => p.id === id); if (!p) return;
   p.color = color;
-  el.closest('.color-dot-row').querySelectorAll('.cdot').forEach(d => d.classList.remove('selected'));
+  el.closest('.color-picker-row').querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
   el.classList.add('selected');
-  const top = document.querySelector(`.player-card[data-id="${id}"] .player-card-top`);
-  if (top) top.style.borderLeftColor = color;
+  const dot = document.querySelector(`.p-item[data-player-id="${id}"] .faction-dot`);
+  if (dot) dot.style.background = color;
   save();
 }
 
@@ -1234,7 +1232,245 @@ function updateLoot(id, i, val) {
 
 function removeLoot(id, i) {
   const p = state.players.find(p => p.id === id); if (!p) return;
-  p.loot.splice(i, 1); save(); renderRoster();
+  p.loot.splice(i, 1); save();
+  const list = document.getElementById('loot-' + id); if (!list) return;
+  list.innerHTML = (p.loot || []).map((item, j) =>
+    `<div class="loot-row">
+      <input class="loot-input" placeholder="Item or note…" value="${escHtml(item)}"
+        oninput="updateLoot('${id}',${j},this.value)">
+      <button class="btn-icon" onclick="removeLoot('${id}',${j})">✕</button>
+    </div>`
+  ).join('');
+}
+
+// ── Players — Detail View (Tier 1 Character Sheet) ────────────────────────────
+
+function renderPlayerDetail(p) {
+  const empty  = document.getElementById('p-empty');
+  const detail = document.getElementById('p-detail');
+  if (!p) {
+    empty.classList.remove('hidden'); detail.classList.add('hidden'); detail.innerHTML = '';
+    return;
+  }
+  empty.classList.add('hidden'); detail.classList.remove('hidden');
+
+  const swatches = PLAYER_COLORS.map(c =>
+    `<div class="color-swatch ${c === p.color ? 'selected' : ''}" style="background:${c}"
+      onclick="setPlayerColor('${p.id}','${c}',this)"></div>`
+  ).join('');
+
+  const hexVal     = p.currentHexKey || '';
+  const hexInvalid = hexVal && !state.hexes[hexVal];
+
+  const lootRows = (p.loot || []).map((item, i) =>
+    `<div class="loot-row">
+      <input class="loot-input" placeholder="Item or note…" value="${escHtml(item)}"
+        oninput="updateLoot('${p.id}',${i},this.value)">
+      <button class="btn-icon" onclick="removeLoot('${p.id}',${i})">✕</button>
+    </div>`
+  ).join('');
+
+  detail.innerHTML = `<div class="char-sheet">
+
+    <!-- Identity -->
+    <div class="section-box" style="margin-bottom:16px">
+      <div class="section-title">Identity</div>
+      <div class="char-row">
+        <div class="field-group" style="flex:1;min-width:140px">
+          <div class="field-label">Player Name</div>
+          <input class="field-input" id="pname-${p.id}" placeholder="Real name or handle…"
+            value="${escHtml(p.name)}" oninput="updatePlayerField('${p.id}','name',this.value)">
+        </div>
+        <div class="field-group" style="flex:1;min-width:140px">
+          <div class="field-label">Character Name</div>
+          <input class="field-input" placeholder="PC name…"
+            value="${escHtml(p.character)}" oninput="updatePlayerField('${p.id}','character',this.value)">
+        </div>
+        <div class="field-group" style="flex:1.5;min-width:160px">
+          <div class="field-label">Profession / Template</div>
+          <input class="field-input" placeholder="Barbarian, Thief, Wizard…"
+            value="${escHtml(p.cls)}" oninput="updatePlayerField('${p.id}','cls',this.value)">
+        </div>
+        <div class="field-group" style="min-width:80px">
+          <div class="field-label">Point Total</div>
+          <input class="field-input" placeholder="150"
+            value="${escHtml(p.pointTotal)}" oninput="updatePlayerField('${p.id}','pointTotal',this.value)">
+        </div>
+        <div class="field-group" style="min-width:80px">
+          <div class="field-label">Unspent</div>
+          <input class="field-input" placeholder="0"
+            value="${escHtml(p.unspentPoints)}" oninput="updatePlayerField('${p.id}','unspentPoints',this.value)">
+        </div>
+      </div>
+      <div class="char-row" style="padding-top:0;gap:20px;align-items:center">
+        <div class="field-group">
+          <div class="field-label">Color</div>
+          <div class="color-picker-row" style="margin-top:4px">${swatches}</div>
+        </div>
+        <div class="field-group" style="min-width:160px">
+          <div class="field-label">Current Hex</div>
+          <input class="field-input hex${hexInvalid ? ' invalid' : ''}"
+            placeholder="col,row — e.g. 4,12"
+            value="${escHtml(hexVal)}"
+            oninput="updatePlayerHex('${p.id}',this.value,this)"
+            title="${hexInvalid ? `Hex &quot;${escHtml(hexVal)}&quot; not found on map yet` : ''}">
+        </div>
+      </div>
+    </div>
+
+    <!-- Attributes -->
+    <div class="section-box" style="margin-bottom:16px">
+      <div class="section-title">Attributes</div>
+      <div class="char-cols">
+        <div class="char-col">
+          <div class="field-group">
+            <div class="field-label">ST — Strength</div>
+            <input class="field-input char-narrow" placeholder="10"
+              value="${escHtml(p.st)}" oninput="updatePlayerField('${p.id}','st',this.value)">
+          </div>
+          <div class="field-group">
+            <div class="field-label">DX — Dexterity</div>
+            <input class="field-input char-narrow" placeholder="10"
+              value="${escHtml(p.dx)}" oninput="updatePlayerField('${p.id}','dx',this.value)">
+          </div>
+          <div class="field-group">
+            <div class="field-label">IQ — Intelligence</div>
+            <input class="field-input char-narrow" placeholder="10"
+              value="${escHtml(p.iq)}" oninput="updatePlayerField('${p.id}','iq',this.value)">
+          </div>
+          <div class="field-group">
+            <div class="field-label">HT — Health</div>
+            <input class="field-input char-narrow" placeholder="10"
+              value="${escHtml(p.ht)}" oninput="updatePlayerField('${p.id}','ht',this.value)">
+          </div>
+        </div>
+        <div class="char-col">
+          <div class="field-group">
+            <div class="field-label">HP — Hit Points</div>
+            <input class="field-input char-narrow" placeholder="10"
+              value="${escHtml(p.hp)}" oninput="updatePlayerField('${p.id}','hp',this.value)">
+            <div class="char-hint">= ST</div>
+          </div>
+          <div class="field-group">
+            <div class="field-label">Will</div>
+            <input class="field-input char-narrow" placeholder="10"
+              value="${escHtml(p.will)}" oninput="updatePlayerField('${p.id}','will',this.value)">
+            <div class="char-hint">= IQ</div>
+          </div>
+          <div class="field-group">
+            <div class="field-label">Per — Perception</div>
+            <input class="field-input char-narrow" placeholder="10"
+              value="${escHtml(p.per)}" oninput="updatePlayerField('${p.id}','per',this.value)">
+            <div class="char-hint">= IQ</div>
+          </div>
+          <div class="field-group">
+            <div class="field-label">FP — Fatigue Points</div>
+            <input class="field-input char-narrow" placeholder="10"
+              value="${escHtml(p.fp)}" oninput="updatePlayerField('${p.id}','fp',this.value)">
+            <div class="char-hint">= HT</div>
+          </div>
+          <div class="field-group">
+            <div class="field-label">Basic Speed</div>
+            <input class="field-input char-narrow" placeholder="5.00"
+              value="${escHtml(p.basicSpeed)}" oninput="updatePlayerField('${p.id}','basicSpeed',this.value)">
+            <div class="char-hint">= (HT+DX)/4</div>
+          </div>
+          <div class="field-group">
+            <div class="field-label">Basic Move</div>
+            <input class="field-input char-narrow" placeholder="5"
+              value="${escHtml(p.basicMove)}" oninput="updatePlayerField('${p.id}','basicMove',this.value)">
+            <div class="char-hint">= &#x230A;Basic Speed&#x230B;</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Defenses & Damage -->
+    <div class="section-box" style="margin-bottom:16px">
+      <div class="section-title">Defenses &amp; Damage</div>
+      <div class="char-row" style="gap:16px">
+        <div class="field-group">
+          <div class="field-label">Dodge</div>
+          <input class="field-input char-narrow" placeholder="8"
+            value="${escHtml(p.dodge)}" oninput="updatePlayerField('${p.id}','dodge',this.value)">
+        </div>
+        <div class="field-group">
+          <div class="field-label">Parry</div>
+          <input class="field-input char-narrow" placeholder="9"
+            value="${escHtml(p.parry)}" oninput="updatePlayerField('${p.id}','parry',this.value)">
+        </div>
+        <div class="field-group">
+          <div class="field-label">Block</div>
+          <input class="field-input char-narrow" placeholder="9"
+            value="${escHtml(p.block)}" oninput="updatePlayerField('${p.id}','block',this.value)">
+        </div>
+        <div class="field-group">
+          <div class="field-label">DR</div>
+          <input class="field-input char-narrow" placeholder="0"
+            value="${escHtml(p.dr)}" oninput="updatePlayerField('${p.id}','dr',this.value)">
+        </div>
+        <div style="width:1px;background:var(--border);margin:18px 4px 0;align-self:stretch"></div>
+        <div class="field-group">
+          <div class="field-label">Thrust</div>
+          <input class="field-input char-narrow" placeholder="1d-2"
+            value="${escHtml(p.thrust)}" oninput="updatePlayerField('${p.id}','thrust',this.value)">
+        </div>
+        <div class="field-group">
+          <div class="field-label">Swing</div>
+          <input class="field-input char-narrow" placeholder="1d-1"
+            value="${escHtml(p.swing)}" oninput="updatePlayerField('${p.id}','swing',this.value)">
+        </div>
+      </div>
+    </div>
+
+    <!-- Advantages -->
+    <div class="section-box" style="margin-bottom:16px">
+      <div class="section-title">Advantages &amp; Perks</div>
+      <textarea class="section-textarea" placeholder="One per line. E.g. Combat Reflexes [15]"
+        oninput="updatePlayerField('${p.id}','advantages',this.value)">${escHtml(p.advantages)}</textarea>
+    </div>
+
+    <!-- Disadvantages -->
+    <div class="section-box" style="margin-bottom:16px">
+      <div class="section-title">Disadvantages &amp; Quirks</div>
+      <textarea class="section-textarea" placeholder="One per line. E.g. Bad Temper [-10]"
+        oninput="updatePlayerField('${p.id}','disadvantages',this.value)">${escHtml(p.disadvantages)}</textarea>
+    </div>
+
+    <!-- Skills -->
+    <div class="section-box" style="margin-bottom:16px">
+      <div class="section-title">Skills</div>
+      <textarea class="section-textarea" placeholder="One per line. E.g. Brawling-14 [4]"
+        oninput="updatePlayerField('${p.id}','skills',this.value)">${escHtml(p.skills)}</textarea>
+    </div>
+
+    <!-- Playstyle & GM Notes -->
+    <div class="sections-grid">
+      <div class="section-box">
+        <div class="section-title">Playstyle Preferences</div>
+        <textarea class="section-textarea" placeholder="Favourite tactics, roleplay style, what they love doing…"
+          oninput="updatePlayerField('${p.id}','prefs',this.value)">${escHtml(p.prefs)}</textarea>
+      </div>
+      <div class="section-box">
+        <div class="section-title">GM Notes</div>
+        <textarea class="section-textarea" placeholder="Secrets, hooks, things the player doesn't know…"
+          oninput="updatePlayerField('${p.id}','notes',this.value)">${escHtml(p.notes)}</textarea>
+      </div>
+    </div>
+
+    <!-- Loot -->
+    <div class="section-box" style="margin-top:16px;margin-bottom:16px">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
+        Loot &amp; Notable Items
+        <button class="btn-small" onclick="addLoot('${p.id}')">+ Add</button>
+      </div>
+      <div class="loot-list" id="loot-${p.id}">${lootRows}</div>
+    </div>
+
+    <div class="card-actions">
+      <button class="btn-danger" onclick="deletePlayer('${p.id}')">Delete Player</button>
+    </div>
+  </div>`;
 }
 
 // ── Relations — Constants ─────────────────────────────────────────────────────
@@ -1328,7 +1564,6 @@ let _relClickTimer = null;
 
 function handleRelClick(a, b) {
   if (_relClickTimer) {
-    // Second click within 280 ms → treat as double-click, open note modal
     clearTimeout(_relClickTimer); _relClickTimer = null;
     openRelNoteModal(a, b);
     return;
@@ -1343,7 +1578,6 @@ function doRelCycle(a, b) {
   const next = REL_TYPES[(idx + 1) % REL_TYPES.length];
 
   if (rel.playersAware) {
-    // Narrative-event confirmation required by data model
     const curLabel = (REL_TYPES.find(r => r.key === rel.type) || {}).label || rel.type;
     _relConfirmCb = () => commitRelType(key, rel, next.key);
     document.getElementById('rel-confirm-body').innerHTML =
@@ -1419,7 +1653,7 @@ document.addEventListener('keydown', e => {
 
 load();
 renderFactionSidebar();
-switchTab(state.ui.activeTab);  // calls renderRelations() if tab is 'relations'
+switchTab(state.ui.activeTab);
 if (state.ui.activeFactionId) {
   const f = state.factions.find(f => f.id === state.ui.activeFactionId);
   if (f) renderFactionDetail(f);
