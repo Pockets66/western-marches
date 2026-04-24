@@ -613,6 +613,28 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
 }
 .map-tool-btn:hover  { background: rgba(200,151,42,0.1);  border-color: var(--gold-dim); color: var(--text); }
 .map-tool-btn.active { background: rgba(200,151,42,0.18); border-color: var(--gold);     color: var(--gold-pale); }
+.map-action-btn {
+  padding: 3px 10px; border: 1px solid var(--gold-dim); background: transparent;
+  color: var(--gold-dim); font-family: 'Cinzel', serif; font-size: 0.6rem;
+  letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; transition: all 0.13s;
+}
+.map-action-btn:hover { background: rgba(200,151,42,0.12); border-color: var(--gold); color: var(--gold-pale); }
+.map-info-coord {
+  font-family: 'Cinzel', serif; font-size: 0.72rem; letter-spacing: 0.15em;
+  text-transform: uppercase; color: var(--gold); font-weight: 600;
+}
+.map-info-terrain { display: flex; align-items: center; gap: 8px; color: var(--text); }
+.map-info-swatch { width: 14px; height: 14px; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.15); }
+.map-info-lbl {
+  font-family: 'Cinzel', serif; font-size: 0.6rem; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--text-muted); margin-bottom: 3px;
+}
+.map-save-btn {
+  font-family: 'Cinzel', serif; font-size: 0.6rem; letter-spacing: 0.1em;
+  text-transform: uppercase; padding: 6px 12px; background: transparent;
+  border: 1px solid var(--gold-dim); color: var(--gold-dim); cursor: pointer; transition: all 0.15s;
+}
+.map-save-btn:hover { border-color: var(--gold); color: var(--gold); }
 
 /* ── Toast & utilities ───────────────────────────────────────────────────── */
 .toast {
@@ -726,6 +748,30 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
         <p>Select a player or add one to begin.</p>
       </div>
       <div id="p-detail" class="hidden"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Map settings modal -->
+<div class="modal-overlay hidden" id="map-settings-modal">
+  <div class="modal-box">
+    <div class="modal-title">Map Settings</div>
+    <div class="field-group">
+      <label class="field-label">Columns (5 – 60)</label>
+      <input type="number" class="field-input" id="ms-cols" min="5" max="60" oninput="_msInputChanged()">
+    </div>
+    <div class="field-group">
+      <label class="field-label">Rows (5 – 40)</label>
+      <input type="number" class="field-input" id="ms-rows" min="5" max="40" oninput="_msInputChanged()">
+    </div>
+    <div class="field-group">
+      <label class="field-label">Hex Size (16 – 64)</label>
+      <input type="number" class="field-input" id="ms-size" min="16" max="64" oninput="_msInputChanged()">
+    </div>
+    <div id="ms-warning" class="hidden" style="font-family:'Crimson Pro',serif;font-size:0.88rem;color:var(--red);line-height:1.4"></div>
+    <div class="modal-actions">
+      <button class="btn-modal-cancel" onclick="closeMapSettings()">Cancel</button>
+      <button class="btn-modal-save" id="ms-create-btn" onclick="applyMapSettings()">Create</button>
     </div>
   </div>
 </div>
@@ -957,11 +1003,17 @@ const TICONS = {
 const TORDER = ['plains','forest','dark-forest','hills','mountain','water','swamp','desert','ruins','settled','unknown'];
 
 let _mapCurTerrain = 'plains';
-let _mapCurMode    = 'paint';
+let _mapCurMode    = 'select';
 let _mapIsDrag     = false;
 let _mapSelHex     = null;
 let _mapHoverHex   = null;
 let _mapReady      = false;
+let _mapRafId      = null;
+
+function _scheduleRedraw() {
+  if (_mapRafId) return;
+  _mapRafId = requestAnimationFrame(() => { _mapRafId = null; drawWorld(); });
+}
 
 // ── Map — geometry ────────────────────────────────────────────────────────────
 
@@ -1028,7 +1080,7 @@ function drawWorldHex(c, r) {
   }
 
   hexPath();
-  ctx.fillStyle = (!hex.explored && hex.terrain !== 'unknown') ? _blend(col, '#000000', 0.42) : col;
+  ctx.fillStyle = (!hex.explored && hex.terrain !== 'unknown') ? _blend(col, '#000000', 0.62) : col;
   ctx.fill();
 
   if (hex.explored) {
@@ -1059,10 +1111,33 @@ function drawWorldHex(c, r) {
   }
 
   if (hex.name && hex.name.trim()) {
-    ctx.fillStyle = hex.terrain === 'unknown' ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.58)';
-    ctx.font = 'italic ' + (hexSize * 0.26) + 'px Crimson Pro,serif';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-    ctx.fillText(hex.name, x, y + hexSize * 0.84);
+    const nm = hex.name.trim();
+    const words = nm.split(/\s+/);
+    const maxW = Math.sqrt(3) * hexSize * 0.89;
+    const baseFs = hexSize * 0.52, minFs = hexSize * 0.24;
+    ctx.save();
+    hexPath(); ctx.clip();
+    ctx.fillStyle = hex.terrain === 'unknown' ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.85)';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.letterSpacing = '-0.005em';
+    // Reduce font only until the longest word fits — no word splitting
+    let fs = baseFs;
+    ctx.font = 'bold italic ' + fs + 'px Crimson Pro,serif';
+    while (fs > minFs && words.some(w => ctx.measureText(w).width > maxW)) {
+      fs -= 0.5; ctx.font = 'bold italic ' + fs + 'px Crimson Pro,serif';
+    }
+    // Greedy word-wrap at chosen font size
+    const lines = [];
+    let cur = '';
+    for (const w of words) {
+      const test = cur ? cur + ' ' + w : w;
+      if (ctx.measureText(test).width <= maxW) { cur = test; }
+      else { if (cur) lines.push(cur); cur = w; }
+    }
+    if (cur) lines.push(cur);
+    const lh = fs * 1.2;
+    lines.forEach((l, i) => ctx.fillText(l, x, y + (i - (lines.length - 1) / 2) * lh));
+    ctx.restore();
   }
 
   if (hex.explored) {
@@ -1073,6 +1148,13 @@ function drawWorldHex(c, r) {
 function drawWorld() {
   const canvas = _mapCanvas(); if (!canvas) return;
   const ctx = canvas.getContext('2d');
+  // Reset context state so every draw starts from the same baseline,
+  // regardless of what renderMapPanel() or external code set before us.
+  const dpr = window.devicePixelRatio || 1;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.letterSpacing = '0px';
+  ctx.globalAlpha   = 1;
+  ctx.setLineDash([]);
   const { cols, rows } = state.mapMeta;
   const CW = canvas.width, CH = canvas.height;
   ctx.clearRect(0, 0, CW, CH);
@@ -1093,14 +1175,16 @@ function _buildMapToolbar() {
       <span class="map-tswatch" style="background:${TCOLORS[t]}"></span>${TNAMES[t]}
     </button>`
   ).join('');
-  const tools = [['paint','Paint'],['erase','Erase']].map(([m, l]) =>
+  const tools = [['select','Select'],['paint','Paint'],['erase','Erase'],['explored','Explored']].map(([m, l]) =>
     `<button class="map-tool-btn${_mapCurMode === m ? ' active' : ''}" data-mode="${m}"
         onclick="setMapMode('${m}')">${l}</button>`
   ).join('');
+  const sep = `<div style="width:1px;height:18px;background:var(--border);margin:0 2px;flex-shrink:0"></div>`;
   tb.innerHTML = `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-    ${swatches}
-    <div style="width:1px;height:18px;background:var(--border);margin:0 2px;flex-shrink:0"></div>
-    ${tools}
+    ${swatches}${sep}${tools}${sep}
+    <button class="map-action-btn" onclick="openMapSettings()">New Map</button>
+    <button class="map-action-btn" onclick="exportMap()">Export</button>
+    <button class="map-action-btn" onclick="importMap()">Import</button>
   </div>`;
 }
 
@@ -1118,10 +1202,13 @@ function setMapMode(mode) {
 
 function applyMapMode(c, r) {
   const hex = getHex(c, r);
-  if      (_mapCurMode === 'paint') { hex.terrain = _mapCurTerrain; }
-  else if (_mapCurMode === 'erase') { hex.terrain = 'unknown'; hex.note = ''; hex.explored = false; hex.name = ''; }
+  if      (_mapCurMode === 'paint')    { hex.terrain = _mapCurTerrain; }
+  else if (_mapCurMode === 'erase')    { hex.terrain = 'unknown'; hex.note = ''; hex.explored = false; hex.name = ''; }
+  else if (_mapCurMode === 'explored') { if (hex.terrain === 'unknown') return; hex.explored = !hex.explored; }
+  else if (_mapCurMode === 'select')   { drawWorld(); renderMapInfo(c, r); return; }
   save();
-  drawWorld();
+  _scheduleRedraw();
+  if (_mapSelHex && _mapSelHex.col === c && _mapSelHex.row === r) renderMapInfo(c, r);
 }
 
 function updateMapStatus() {
@@ -1140,8 +1227,7 @@ function _initMapEvents() {
   const canvas = _mapCanvas(); if (!canvas) return;
   function cxy(e) {
     const rect = canvas.getBoundingClientRect();
-    return { x: (e.clientX-rect.left)*(canvas.width/rect.width),
-             y: (e.clientY-rect.top) *(canvas.height/rect.height) };
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   }
   canvas.addEventListener('mousedown', e => {
     if (e.button !== 0) return;
@@ -1155,10 +1241,159 @@ function _initMapEvents() {
     const h = pxToHex(x, y);
     _mapHoverHex = h;
     updateMapStatus();
-    if (_mapIsDrag && h) applyMapMode(h.col, h.row);
+    if (_mapIsDrag && h && _mapCurMode !== 'select') applyMapMode(h.col, h.row);
   });
   canvas.addEventListener('mouseup',    () => { _mapIsDrag = false; });
   canvas.addEventListener('mouseleave', () => { _mapIsDrag = false; _mapHoverHex = null; updateMapStatus(); });
+}
+
+// ── Map — info panel ─────────────────────────────────────────────────────────
+
+function renderMapInfo(c, r) {
+  const panel = document.getElementById('map-info-panel'); if (!panel) return;
+  const hex = getHex(c, r);
+  panel.innerHTML = `
+    <div class="map-info-coord">Hex ${c},${r}</div>
+    <div class="map-info-terrain">
+      <div class="map-info-swatch" style="background:${TCOLORS[hex.terrain] || '#2a2218'}"></div>
+      <span>${escHtml(TNAMES[hex.terrain] || 'Unknown')}</span>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;${hex.terrain === 'unknown' ? 'opacity:0.35;cursor:not-allowed' : 'cursor:pointer'};user-select:none">
+      <input type="checkbox" id="map-exp-cb" ${hex.explored ? 'checked' : ''} ${hex.terrain === 'unknown' ? 'disabled' : ''}
+        onchange="toggleMapExplored(${c},${r},this.checked)">
+      <span class="map-info-lbl" style="margin-bottom:0">Explored</span>
+    </label>
+    <div>
+      <div class="map-info-lbl">Hex Name</div>
+      <input class="field-input" id="map-name-inp" value="${escHtml(hex.name)}"
+        placeholder="Name this hex…" oninput="updateMapHexField(${c},${r},'name',this.value)">
+    </div>
+    <div>
+      <div class="map-info-lbl">Notes</div>
+      <textarea class="section-textarea" id="map-note-ta" style="min-height:80px"
+        placeholder="Notes about this hex…"
+        oninput="updateMapHexField(${c},${r},'note',this.value)">${escHtml(hex.note)}</textarea>
+    </div>
+    <button class="map-save-btn" id="map-save-btn" onclick="mapSaveNoteFlash()">Save Note</button>`;
+}
+
+function toggleMapExplored(c, r, val) {
+  const hex = getHex(c, r); hex.explored = val; save(); drawWorld();
+}
+
+function updateMapHexField(c, r, field, val) {
+  const hex = getHex(c, r); hex[field] = val; save();
+  if (field === 'name') drawWorld();
+}
+
+function mapSaveNoteFlash() {
+  drawWorld();
+  const btn = document.getElementById('map-save-btn'); if (!btn) return;
+  btn.textContent = 'Saved ✓';
+  btn.style.borderColor = 'var(--green)'; btn.style.color = '#7cbc80';
+  setTimeout(() => {
+    if (!document.getElementById('map-save-btn')) return;
+    btn.textContent = 'Save Note';
+    btn.style.borderColor = ''; btn.style.color = '';
+  }, 1500);
+}
+
+// ── Map — settings modal ─────────────────────────────────────────────────────
+
+function openMapSettings() {
+  const { cols, rows, hexSize } = state.mapMeta;
+  document.getElementById('ms-cols').value = cols;
+  document.getElementById('ms-rows').value = rows;
+  document.getElementById('ms-size').value = hexSize;
+  _msInputChanged();
+  document.getElementById('map-settings-modal').classList.remove('hidden');
+}
+
+function closeMapSettings() {
+  document.getElementById('map-settings-modal').classList.add('hidden');
+  _msInputChanged();
+}
+
+function _msInputChanged() {
+  const w = document.getElementById('ms-warning'); if (!w) return;
+  w.classList.add('hidden');
+  delete w.dataset.pendingConfirm;
+  const btn = document.getElementById('ms-create-btn'); if (btn) btn.textContent = 'Create';
+}
+
+function applyMapSettings() {
+  const cols    = Math.max(5,  Math.min(60, parseInt(document.getElementById('ms-cols').value) || 22));
+  const rows    = Math.max(5,  Math.min(40, parseInt(document.getElementById('ms-rows').value) || 16));
+  const hexSize = Math.max(16, Math.min(64, parseInt(document.getElementById('ms-size').value) || 32));
+  const outOfBounds = Object.keys(state.hexes).filter(k => {
+    const [c, r] = k.split(',').map(Number);
+    return c >= cols || r >= rows;
+  });
+  const warn = document.getElementById('ms-warning');
+  if (outOfBounds.length > 0 && !warn.dataset.pendingConfirm) {
+    warn.dataset.pendingConfirm = '1';
+    warn.textContent = `${outOfBounds.length} hex${outOfBounds.length !== 1 ? 'es' : ''} outside the new bounds will be deleted. Click Create again to confirm.`;
+    warn.classList.remove('hidden');
+    document.getElementById('ms-create-btn').textContent = 'Confirm & Create';
+    return;
+  }
+  state.mapMeta = { cols, rows, hexSize };
+  outOfBounds.forEach(k => delete state.hexes[k]);
+  if (_mapSelHex && (_mapSelHex.col >= cols || _mapSelHex.row >= rows)) {
+    _mapSelHex = null;
+    document.getElementById('map-info-panel').innerHTML =
+      '<span style="color:var(--text-muted);font-style:italic;font-size:0.85rem">No hex selected.</span>';
+  }
+  save();
+  closeMapSettings();
+  renderMapPanel();
+}
+
+// ── Map — export / import ─────────────────────────────────────────────────────
+
+function exportMap() {
+  const today = new Date().toISOString().slice(0, 10);
+  const blob = new Blob(
+    [JSON.stringify({ mapMeta: state.mapMeta, hexes: state.hexes }, null, 2)],
+    { type: 'application/json' }
+  );
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'hexmap-export-' + today + '.json'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importMap() {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = '.json';
+  inp.onchange = e => {
+    const file = e.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const data = JSON.parse(ev.target.result);
+        if (!data.mapMeta || typeof data.mapMeta.cols !== 'number' ||
+            typeof data.mapMeta.rows !== 'number' || typeof data.mapMeta.hexSize !== 'number' ||
+            !data.hexes || typeof data.hexes !== 'object') throw new Error('bad shape');
+        if (!confirm('Replace current map? This cannot be undone.')) return;
+        state.mapMeta = {
+          cols:    Math.max(5,  Math.min(60, data.mapMeta.cols)),
+          rows:    Math.max(5,  Math.min(40, data.mapMeta.rows)),
+          hexSize: Math.max(16, Math.min(64, data.mapMeta.hexSize)),
+        };
+        state.hexes = data.hexes;
+        _mapSelHex = null;
+        save();
+        renderMapPanel();
+        document.getElementById('map-info-panel').innerHTML =
+          '<span style="color:var(--text-muted);font-style:italic;font-size:0.85rem">No hex selected.</span>';
+      } catch {
+        toast('Import failed — invalid map JSON.');
+      }
+    };
+    reader.readAsText(file);
+  };
+  inp.click();
 }
 
 // ── Map — panel render ────────────────────────────────────────────────────────
@@ -1169,8 +1404,11 @@ function renderMapPanel() {
   const W = Math.ceil(cols * HW + HW / 2 + PAD * 2);
   const H = Math.ceil(rows * hexSize * 1.5 + hexSize * 0.5 + PAD * 2);
   const canvas = _mapCanvas(); if (!canvas) return;
-  canvas.width  = W;
-  canvas.height = H;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width  = Math.round(W * dpr);
+  canvas.height = Math.round(H * dpr);
+  canvas.style.width  = W + 'px';
+  canvas.style.height = H + 'px';
   _buildMapToolbar();
   if (!_mapReady) _initMapEvents();
   drawWorld();

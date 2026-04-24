@@ -20,7 +20,7 @@ v2 → v3:
 - Ensure every event has `sessionId: null` and `playerKnown: false` as defaults.
 - Increment schemaVersion to 3.
 
-v3 → v4 (this update):
+v3 → v4:
 - For each player: rename `skills` → `notes` (GM notes field); delete `level`.
 - Add new fields (all `""`): `pointTotal`, `unspentPoints`, `st`, `dx`, `iq`, `ht`,
   `hp`, `will`, `per`, `fp`, `basicSpeed`, `basicMove`, `dodge`, `parry`, `block`,
@@ -28,6 +28,11 @@ v3 → v4 (this update):
 - `relations` tab removed from top-level `ui.activeTab`; any persisted value of
   `"relations"` is migrated to `"factions"` on load.
 - Increment schemaVersion to 4.
+
+v4 → v5 (this update):
+- Add `state.mapMeta = { cols: 22, rows: 16, hexSize: 32 }` if missing.
+- Ensure `state.hexes` is an object (default `{}`).
+- Increment schemaVersion to 5.
 
 Incoming data from partner files (one-time import, not automatic):
 - `wm_sessions_v1` → read players into `state.players`, read sessions into
@@ -43,14 +48,15 @@ Import should be a deliberate user action, not automatic — see future slice.
 
 ```js
 state = {
-  schemaVersion: 4,
+  schemaVersion: 5,
   factions:    [Faction],
   npcs:        [NPC],
   rumors:      [Rumor],
   quests:      [Quest],
   events:      [Event],
-  players:     [Player],    // NEW
-  sessions:    [Session],   // NEW — consolidates planned + actual + expedition narrative
+  players:     [Player],
+  sessions:    [Session],
+  mapMeta:     MapMeta,     // NEW
   hexes:       { "col,row": Hex },
   pins:        [Pin],
   relations:   { "factionIdA|factionIdB": Relation },
@@ -282,6 +288,24 @@ stored data.
   misc:       [{ text: string, sub: string }],
 }
 ```
+
+### MapMeta
+
+Grid configuration. Stored at `state.mapMeta` (not in any collection).
+
+```js
+{
+  cols:    number,   // grid width in hexes (default 22, min 5, max 60)
+  rows:    number,   // grid height in hexes (default 16, min 5, max 40)
+  hexSize: number,   // hex circumradius in pixels (default 32, min 16, max 64)
+}
+```
+
+Canvas pixel dimensions are derived from these values using pointy-top hex geometry:
+- `HW = sqrt(3) * hexSize`  (hex flat width)
+- `VS = hexSize * 1.5`      (vertical step)
+- `W  = ceil(cols * HW + HW/2 + PAD*2)`
+- `H  = ceil(rows * VS + hexSize*0.5 + PAD*2)`
 
 ### Hex
 
