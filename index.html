@@ -540,6 +540,10 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
 }
 .rumor-new-card:hover { border-color: var(--gold-dim); color: var(--gold-dim); background: rgba(200,151,42,0.04); }
 
+/* ── NPCs panel ──────────────────────────────────────────────────────────── */
+#panel-npcs { align-items: stretch; overflow: hidden;
+  font-size: inherit; letter-spacing: normal; text-transform: none; color: var(--text); }
+
 /* ── Players panel ───────────────────────────────────────────────────────── */
 #panel-players { align-items: stretch; overflow: hidden;
   font-size: inherit; letter-spacing: normal; text-transform: none; color: var(--text); }
@@ -781,6 +785,7 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
     <button class="tab-btn" data-tab="quests">Quests</button>
     <button class="tab-btn" data-tab="sessions">Sessions</button>
     <button class="tab-btn" data-tab="rumors">Rumors</button>
+    <button class="tab-btn" data-tab="npcs">NPCs</button>
     <button class="tab-btn" data-tab="players">Players</button>
   </nav>
 </header>
@@ -857,6 +862,23 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
       </div>
     </div>
   </div>
+  <div class="panel" id="panel-npcs">
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <span>NPCs</span>
+        <button class="btn-small" onclick="newNpc()">+ New NPC</button>
+      </div>
+      <div class="sidebar-list" id="npc-list"></div>
+    </div>
+    <div class="f-content">
+      <div class="empty-state" id="npc-empty">
+        <div class="glyph">✦</div>
+        <p>Select an NPC or create one to begin.</p>
+      </div>
+      <div id="npc-detail" class="hidden"></div>
+    </div>
+  </div>
+
   <div class="panel" id="panel-quests">[Quests]</div>
 
   <div class="panel" id="panel-sessions">
@@ -996,7 +1018,7 @@ function toast(msg) {
 const STORAGE_KEY = 'wm_unified_v1';
 
 let state = {
-  schemaVersion: 7,
+  schemaVersion: 8,
   factions:  [],
   npcs:      [],
   rumors:    [],
@@ -1014,6 +1036,7 @@ let state = {
     activeQuestId:   null,
     activeSessionId: null,
     activePlayerId:  null,
+    activeNpcId:     null,
     activeHexKey:    null,
     rumorFilter:     '',
     questFilter:     '',
@@ -1035,13 +1058,14 @@ function load() {
   try {
     const parsed = JSON.parse(raw);
     const v = parsed.schemaVersion || 1;
-    if (v <= 7) {
+    if (v <= 8) {
       if (v < 2) migrateFactions(parsed);
       if (v < 3) migrateToV3(parsed);
       if (v < 4) migrateToV4(parsed);
       if (v < 5) migrateToV5(parsed);
       if (v < 6) migrateToV6(parsed);
       if (v < 7) migrateToV7(parsed);
+      if (v < 8) migrateToV8(parsed);
       state = parsed;
       if (state.ui && state.ui.activeTab === 'relations') state.ui.activeTab = 'factions';
       if (state.ui && !('activeSessionId' in state.ui)) state.ui.activeSessionId = null;
@@ -1129,6 +1153,16 @@ function migrateToV7(parsed) {
   parsed.schemaVersion = 7;
 }
 
+function migrateToV8(parsed) {
+  (parsed.npcs || []).forEach(n => {
+    if (!('disposition' in n)) n.disposition  = 'unknown';
+    if (!('description' in n)) n.description  = '';
+    if (!('secrets'     in n)) n.secrets      = '';
+    if (!('playerKnown' in n)) n.playerKnown  = false;
+  });
+  parsed.schemaVersion = 8;
+}
+
 function migrateFactions(parsed) {
   const activityMap = { dormant: 'dormant', rising: 'active', active: 'active', defeated: 'disbanded' };
   (parsed.factions || []).forEach(f => {
@@ -1172,6 +1206,13 @@ function switchTab(tab) {
     if (state.ui.activeSessionId) {
       const s = state.sessions.find(s => s.id === state.ui.activeSessionId);
       if (s) renderSessionDetail(s);
+    }
+  }
+  if (tab === 'npcs') {
+    renderNpcSidebar();
+    if (state.ui.activeNpcId) {
+      const n = state.npcs.find(n => n.id === state.ui.activeNpcId);
+      if (n) selectNpc(n.id);
     }
   }
   if (tab === 'players') {
@@ -2628,6 +2669,55 @@ function renderSessionDetail(s) {
       ${_sSec(s.id, 'narrative', 'Narrative', _sNarrativeHTML(s))}
       ${_sSec(s.id, 'tagged', 'Tagged Lists', _sTaggedListsHTML(s))}
     </div>`;
+}
+
+// ── Cross-tab navigation ──────────────────────────────────────────────────────
+
+function goToTab(tabName, contextUpdates) {
+  if (contextUpdates) Object.assign(state.ui, contextUpdates);
+  switchTab(tabName);
+}
+
+// ── NPCs ──────────────────────────────────────────────────────────────────────
+
+function renderNpcSidebar() {
+  const list = document.getElementById('npc-list'); if (!list) return;
+  const sorted = state.npcs.slice().sort((a, b) =>
+    (a.name || '').localeCompare(b.name || '')
+  );
+  if (!sorted.length) {
+    list.innerHTML = '<div style="padding:16px;color:var(--text-muted);font-size:0.85rem;font-style:italic;text-align:center">No NPCs yet.</div>';
+    return;
+  }
+  list.innerHTML = sorted.map(n => {
+    const faction = n.factionId ? state.factions.find(f => f.id === n.factionId) : null;
+    const dot     = faction ? faction.color : '#6a6060';
+    const nameHtml = n.name
+      ? escHtml(n.name)
+      : '<em style="color:var(--text-muted)">Unnamed</em>';
+    return `<div class="p-item${n.id === state.ui.activeNpcId ? ' active' : ''}"
+        onclick="selectNpc('${n.id}')">
+      <div class="faction-dot" style="background:${dot}"></div>
+      <div class="p-item-name">${nameHtml}</div>
+    </div>`;
+  }).join('');
+}
+
+function selectNpc(id) {
+  state.ui.activeNpcId = id;
+  save();
+  renderNpcSidebar();
+  // full renderNpcDetail() wired in Stage 2
+}
+
+function newNpc() {
+  const n = {
+    id: uid(), name: '', role: '', notes: '',
+    factionId: null, pinId: null,
+    disposition: 'unknown', description: '', secrets: '', playerKnown: false,
+  };
+  state.npcs.push(n);
+  goToTab('npcs', { activeNpcId: n.id });
 }
 
 // ── Players — Constants ───────────────────────────────────────────────────────

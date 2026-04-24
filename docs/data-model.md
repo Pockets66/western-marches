@@ -41,10 +41,14 @@ v5 → v6:
 - Set `currentHexKey = null` on every player (old keys are meaningless after the wipe).
 - Increment schemaVersion to 6.
 
-v6 → v7 (this update):
+v6 → v7:
 - For each rumor: add `archived: false`, `createdAt: <now>`, `archivedAt: null` if missing.
 - Fix any `status: "dangerous"` → `"unverified"` (cleanup from earlier planning).
 - Increment schemaVersion to 7.
+
+v7 → v8 (this update):
+- For each NPC: add `disposition: "unknown"`, `description: ""`, `secrets: ""`, `playerKnown: false` if missing.
+- Increment schemaVersion to 8.
 
 Incoming data from partner files (one-time import, not automatic):
 - `wm_sessions_v1` → read players into `state.players`, read sessions into
@@ -60,7 +64,7 @@ Import should be a deliberate user action, not automatic — see future slice.
 
 ```js
 state = {
-  schemaVersion: 7,
+  schemaVersion: 8,
   factions:    [Faction],
   npcs:        [NPC],
   rumors:      [Rumor],
@@ -195,8 +199,12 @@ event history, filter `state.events` by `factionIds`.
   name: string,
   role: string,
   notes: string,
-  factionId: string | null,    // null = independent / freelance
-  pinId:     string | null,    // where they're typically found; null = mobile/unknown
+  factionId:   string | null,  // null = independent / freelance
+  pinId:       string | null,  // where they're typically found; null = mobile/unknown
+  disposition: "friendly" | "neutral" | "hostile" | "unknown",  // default "unknown"
+  description: string,         // physical appearance, voice, mannerisms
+  secrets:     string,         // GM-only: what does this NPC know?
+  playerKnown: boolean,        // default false — have players encountered this NPC?
 }
 ```
 
