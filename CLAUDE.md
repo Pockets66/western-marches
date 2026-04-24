@@ -11,6 +11,10 @@ This project is merging two existing standalone HTML tools:
 These reference files are READ-ONLY. Do not modify them. The merged app lives in
 `index.html` at the project root (create it when needed).
 
+## Entities (see docs/data-model.md for full schema)
+Factions, NPCs, Rumors, Quests, Events, Players, Sessions, Hexes, Pins, Relations.
+All top-level collections keyed by opaque IDs. Cross-references use IDs only.
+
 ## Architecture constraints
 - Single HTML file. All CSS inline in `<style>`, all JS inline in `<script>`.
 - Vanilla JS only. No frameworks, no build step, no npm, no bundler.
@@ -38,3 +42,9 @@ in the same commit.
 - Export/import beyond plain JSON
 - Mobile-responsive layout (desktop only)
 - Undo/redo beyond what git provides
+
+## Planned future features (don't build yet, but don't preclude)
+- NPC detail page with GURPS stats, traits, profession, appearance
+- NPC-to-NPC relationships (separate from faction relations)
+- PC-to-NPC relationships (PCs may become a separate top-level collection)
+- Designs that hardcode NPCs as "just a name + role" will need to be revisited

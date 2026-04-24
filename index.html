@@ -447,6 +447,111 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
 .char-narrow { width: 80px !important; }
 .char-hint { font-family: 'Crimson Pro', serif; font-size: 0.72rem; color: var(--text-muted); font-style: italic; margin-top: 1px; }
 
+/* ── Sessions panel ──────────────────────────────────────────────────────── */
+#panel-sessions { align-items: stretch; overflow: hidden;
+  font-size: inherit; letter-spacing: normal; text-transform: none; color: var(--text); }
+.s-item {
+  display: flex; align-items: center; gap: 10px; padding: 9px 16px;
+  cursor: pointer; transition: background 0.15s; border-left: 3px solid transparent;
+}
+.s-item:hover { background: rgba(200,151,42,0.06); }
+.s-item.active { background: rgba(200,151,42,0.1); border-left-color: var(--gold); }
+.s-item-title { font-size: 0.9rem; color: var(--text); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.s-item-date { font-size: 0.75rem; color: var(--text-muted); }
+.s-item-chip {
+  font-family: 'Cinzel', serif; font-size: 0.58rem; letter-spacing: 0.08em;
+  padding: 2px 6px; border: 1px solid var(--border-lit); color: var(--text-dim); white-space: nowrap;
+}
+.s-card { max-width: 900px; }
+.s-card-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 16px; padding-bottom: 20px; border-bottom: 1px solid var(--border);
+}
+.s-title-group { flex: 1; min-width: 0; }
+.s-title-input {
+  font-family: 'Cinzel', serif; font-size: 1.4rem; font-weight: 900;
+  color: var(--gold-pale); background: transparent; border: none;
+  border-bottom: 1px dashed var(--gold-dim); outline: none; width: 100%;
+  line-height: 1.1; margin-bottom: 10px;
+}
+.s-title-input::placeholder { color: var(--text-muted); }
+.s-date-input {
+  background: transparent; border: none; border-bottom: 1px dashed var(--border-lit);
+  color: var(--text-dim); font-family: 'Crimson Pro', Georgia, serif;
+  font-size: 0.88rem; outline: none; min-width: 0; width: 160px;
+}
+.s-date-input:focus { border-bottom-color: var(--gold-dim); color: var(--text); }
+.s-date-input::placeholder { color: var(--text-muted); font-style: italic; }
+.s-attend-label {
+  font-family: 'Cinzel', serif; font-size: 0.62rem; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--text-muted); margin-top: 16px; margin-bottom: 6px;
+}
+.s-attend-grid { display: flex; flex-wrap: wrap; gap: 8px; padding-bottom: 4px; }
+.s-attend-empty { font-family: 'Crimson Pro', serif; font-size: 0.85rem; color: var(--text-muted); font-style: italic; padding: 4px 0 4px; }
+.s-attend-chip {
+  display: flex; align-items: center; gap: 7px; padding: 5px 10px;
+  border: 1px solid var(--border-lit); cursor: pointer; transition: all 0.15s; user-select: none;
+  font-family: 'Crimson Pro', Georgia, serif; font-size: 0.88rem; color: var(--text-dim);
+}
+.s-attend-chip:hover { border-color: var(--gold-dim); color: var(--text); }
+.s-attend-chip.present { border-color: var(--gold); color: var(--text); background: rgba(200,151,42,0.08); }
+.s-attend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.s-section { border-top: 1px solid var(--border); margin-top: 8px; }
+.s-section-hdr {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 11px 0; cursor: pointer; user-select: none;
+  font-family: 'Cinzel', serif; font-size: 0.68rem; letter-spacing: 0.15em;
+  text-transform: uppercase; color: var(--gold-dim);
+}
+.s-section-hdr:hover { color: var(--gold); }
+.s-section-arrow { font-size: 0.55rem; display: inline-block; transition: transform 0.15s; }
+.s-section-hdr.collapsed .s-section-arrow { transform: rotate(-90deg); }
+.s-section-body { padding-bottom: 16px; display: flex; flex-direction: column; gap: 12px; }
+.s-hooks-list { display: flex; flex-direction: column; gap: 4px; padding: 6px 12px 8px; }
+.s-hook-row { display: flex; gap: 6px; align-items: center; }
+.s-hook-text {
+  flex: 2; background: rgba(0,0,0,0.15); border: 1px solid var(--border);
+  color: var(--text); font-family: 'Crimson Pro', Georgia, serif; font-size: 0.88rem;
+  padding: 4px 8px; outline: none;
+}
+.s-hook-text:focus { border-color: var(--gold-dim); }
+.s-hook-source {
+  flex: 1; background: rgba(0,0,0,0.15); border: 1px solid var(--border);
+  color: var(--text-dim); font-family: 'Crimson Pro', Georgia, serif;
+  font-size: 0.85rem; padding: 4px 8px; outline: none; font-style: italic;
+}
+.s-hook-source:focus { border-color: var(--gold-dim); color: var(--text); }
+.s-hook-text::placeholder, .s-hook-source::placeholder { color: var(--text-muted); font-style: italic; }
+.s-report-textarea {
+  width: 100%; min-height: 120px; background: rgba(200,151,42,0.04); border: none;
+  border-top: 2px solid var(--gold-dim); outline: none; color: var(--text);
+  font-family: 'Crimson Pro', Georgia, serif; font-size: 0.95rem; line-height: 1.7;
+  padding: 12px; resize: vertical;
+}
+.s-report-textarea::placeholder { color: var(--text-muted); font-style: italic; }
+.s-gmnotes-textarea {
+  width: 100%; min-height: 90px; background: rgba(154,32,32,0.06); border: none;
+  border-top: 2px solid var(--red-dim); outline: none; color: var(--text);
+  font-family: 'Crimson Pro', Georgia, serif; font-size: 0.88rem; line-height: 1.6;
+  padding: 12px; resize: vertical;
+}
+.s-gmnotes-textarea::placeholder { color: var(--text-muted); font-style: italic; }
+.s-tlist { display: flex; flex-direction: column; gap: 3px; padding: 4px 12px 8px; }
+.s-tlist-row { display: flex; gap: 6px; align-items: center; }
+.s-tlist-main {
+  flex: 2; background: rgba(0,0,0,0.15); border: 1px solid var(--border);
+  color: var(--text); font-family: 'Crimson Pro', Georgia, serif; font-size: 0.88rem;
+  padding: 4px 8px; outline: none;
+}
+.s-tlist-main:focus { border-color: var(--gold-dim); }
+.s-tlist-sub {
+  flex: 1; background: rgba(0,0,0,0.15); border: 1px solid var(--border);
+  color: var(--text-dim); font-family: 'Crimson Pro', Georgia, serif;
+  font-size: 0.85rem; padding: 4px 8px; outline: none; font-style: italic;
+}
+.s-tlist-sub:focus { border-color: var(--gold-dim); color: var(--text); }
+.s-tlist-main::placeholder, .s-tlist-sub::placeholder { color: var(--text-muted); font-style: italic; }
+
 /* ── Toast & utilities ───────────────────────────────────────────────────── */
 .toast {
   position: fixed; bottom: 20px; right: 20px;
@@ -468,6 +573,7 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
     <button class="tab-btn" data-tab="factions">Factions</button>
     <button class="tab-btn" data-tab="rumors">Rumors</button>
     <button class="tab-btn" data-tab="quests">Quests</button>
+    <button class="tab-btn" data-tab="sessions">Sessions</button>
     <button class="tab-btn" data-tab="players">Players</button>
   </nav>
 </header>
@@ -513,6 +619,23 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
 
   <div class="panel" id="panel-rumors">[Rumors]</div>
   <div class="panel" id="panel-quests">[Quests]</div>
+
+  <div class="panel" id="panel-sessions">
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <span>Sessions</span>
+        <button class="btn-small" onclick="newSession()">+ New</button>
+      </div>
+      <div class="sidebar-list" id="s-list"></div>
+    </div>
+    <div class="f-content">
+      <div class="empty-state" id="s-empty">
+        <div class="glyph">✦</div>
+        <p>No session selected.</p>
+      </div>
+      <div id="s-detail" class="hidden"></div>
+    </div>
+  </div>
 
   <div class="panel" id="panel-players">
     <div class="sidebar">
@@ -622,6 +745,24 @@ function load() {
       if (v < 4) migrateToV4(parsed);
       state = parsed;
       if (state.ui && state.ui.activeTab === 'relations') state.ui.activeTab = 'factions';
+      if (state.ui && !('activeSessionId' in state.ui)) state.ui.activeSessionId = null;
+      (state.sessions || []).forEach(s => {
+        if (!('title'    in s)) s.title    = '';
+        if (!('date'     in s)) s.date     = '';
+        if (!('playerVisible' in s)) s.playerVisible = false;
+        if (!s.attendance || typeof s.attendance !== 'object') s.attendance = {};
+        if (!Array.isArray(s.hooks))               s.hooks               = [];
+        if (!('planned'  in s)) s.planned  = '';
+        if (!('actual'   in s)) s.actual   = '';
+        if (!('location' in s)) s.location = '';
+        if (!('report'   in s)) s.report   = '';
+        if (!('gmNotes'  in s)) s.gmNotes  = '';
+        if (!Array.isArray(s.hexesVisited))        s.hexesVisited        = [];
+        if (!Array.isArray(s.factionsEncountered)) s.factionsEncountered = [];
+        if (!Array.isArray(s.loot))                s.loot                = [];
+        if (!Array.isArray(s.casualties))          s.casualties          = [];
+        if (!Array.isArray(s.misc))                s.misc                = [];
+      });
     }
   } catch (e) {
     console.warn('wm: failed to parse saved state', e);
@@ -688,6 +829,13 @@ function switchTab(tab) {
   });
   state.ui.activeTab = tab;
   save();
+  if (tab === 'sessions') {
+    renderSessionSidebar();
+    if (state.ui.activeSessionId) {
+      const s = state.sessions.find(s => s.id === state.ui.activeSessionId);
+      if (s) renderSessionDetail(s);
+    }
+  }
   if (tab === 'players') {
     renderPlayerSidebar();
     if (state.ui.activePlayerId) {
@@ -1123,6 +1271,337 @@ function renderFactionDetail(f) {
   </div>`;
 }
 
+// ── Sessions — CRUD ───────────────────────────────────────────────────────────
+
+function newSession() {
+  const s = {
+    id: uid(), title: '', date: '', playerVisible: false,
+    attendance: {}, hooks: [], planned: '', actual: '',
+    location: '', report: '', gmNotes: '',
+    hexesVisited: [], factionsEncountered: [], loot: [], casualties: [], misc: [],
+  };
+  state.sessions.push(s);
+  state.ui.activeSessionId = s.id;
+  save();
+  renderSessionSidebar();
+  renderSessionDetail(s);
+}
+
+function deleteSession(id) {
+  if (!confirm('Delete this session? This cannot be undone.')) return;
+  state.events.forEach(e => { if (e.sessionId === id) e.sessionId = null; });
+  state.sessions = state.sessions.filter(s => s.id !== id);
+  if (state.ui.activeSessionId === id) {
+    state.ui.activeSessionId = null;
+    document.getElementById('s-empty').classList.remove('hidden');
+    const detail = document.getElementById('s-detail');
+    detail.classList.add('hidden');
+    detail.innerHTML = '';
+  }
+  save();
+  renderSessionSidebar();
+}
+
+function updateSessionField(id, field, val) {
+  const s = state.sessions.find(s => s.id === id); if (!s) return;
+  s[field] = val; save();
+  if (field === 'title' || field === 'date') renderSessionSidebar();
+}
+
+function toggleSessionVisible(id) {
+  const s = state.sessions.find(s => s.id === id); if (!s) return;
+  s.playerVisible = !s.playerVisible; save();
+  const track = document.getElementById('s-visible-track-' + id);
+  if (track) track.classList.toggle('on', s.playerVisible);
+  const lbl = document.getElementById('s-visible-lbl-' + id);
+  if (lbl) lbl.textContent = s.playerVisible ? 'Player visible' : 'Hidden from players';
+}
+
+// ── Sessions — Sidebar ────────────────────────────────────────────────────────
+
+function renderSessionSidebar() {
+  const list = document.getElementById('s-list');
+  if (!state.sessions.length) {
+    list.innerHTML = '<div style="padding:16px;color:var(--text-muted);font-size:0.85rem;font-style:italic;text-align:center">No sessions yet</div>';
+    return;
+  }
+  const sorted = state.sessions.slice().reverse();
+  list.innerHTML = sorted.map(s => {
+    const attendCount = Object.values(s.attendance || {}).filter(Boolean).length;
+    const chip = attendCount > 0
+      ? `<span class="s-item-chip">${attendCount} player${attendCount !== 1 ? 's' : ''}</span>`
+      : '';
+    return `<div class="s-item${s.id === state.ui.activeSessionId ? ' active' : ''}" onclick="selectSession('${s.id}')">
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:6px">
+          <div class="s-item-title">${escHtml(s.title || 'Untitled Session')}</div>
+          ${chip}
+        </div>
+        ${s.date ? `<div class="s-item-date">${escHtml(s.date)}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function selectSession(id) {
+  state.ui.activeSessionId = id;
+  save();
+  renderSessionSidebar();
+  const s = state.sessions.find(s => s.id === id);
+  if (s) renderSessionDetail(s);
+}
+
+// ── Sessions — Detail ─────────────────────────────────────────────────────────
+
+const _sCollapse = {};
+
+function toggleSSection(sid, section) {
+  const key = sid + ':' + section;
+  _sCollapse[key] = !_sCollapse[key];
+  const collapsed = _sCollapse[key];
+  const body = document.getElementById('s-body-' + sid + '-' + section);
+  const hdr  = document.getElementById('s-hdr-'  + sid + '-' + section);
+  if (body) body.classList.toggle('hidden', collapsed);
+  if (hdr)  hdr.classList.toggle('collapsed', collapsed);
+}
+
+function _sSec(sid, section, label, inner) {
+  const key = sid + ':' + section;
+  if (!(key in _sCollapse)) _sCollapse[key] = (section === 'narrative' || section === 'tagged');
+  const col = _sCollapse[key];
+  return `<div class="s-section">
+    <div class="s-section-hdr${col ? ' collapsed' : ''}" id="s-hdr-${sid}-${section}"
+        onclick="toggleSSection('${sid}','${section}')">
+      <span>${label}</span>
+      <span class="s-section-arrow">▼</span>
+    </div>
+    <div class="s-section-body${col ? ' hidden' : ''}" id="s-body-${sid}-${section}">
+      ${inner}
+    </div>
+  </div>`;
+}
+
+function _sAttendHTML(s) {
+  const label = '<div class="s-attend-label">Attendance</div>';
+  if (!state.players.length) {
+    return label + '<div class="s-attend-empty">No players in roster — add players in the Players tab.</div>';
+  }
+  const chips = state.players.map(p => {
+    const present = !!(s.attendance && s.attendance[p.id]);
+    return `<div class="s-attend-chip${present ? ' present' : ''}"
+        id="s-chip-${s.id}-${p.id}" onclick="toggleAttendance('${s.id}','${p.id}')">
+      <div class="s-attend-dot" style="background:${escHtml(p.color)}"></div>
+      ${escHtml(p.character || p.name || 'Unnamed')}
+    </div>`;
+  }).join('');
+  return label + `<div class="s-attend-grid">${chips}</div>`;
+}
+
+function toggleAttendance(sid, pid) {
+  const s = state.sessions.find(s => s.id === sid); if (!s) return;
+  if (!s.attendance) s.attendance = {};
+  s.attendance[pid] = !s.attendance[pid];
+  save();
+  const chip = document.getElementById('s-chip-' + sid + '-' + pid);
+  if (chip) chip.classList.toggle('present', !!s.attendance[pid]);
+  renderSessionSidebar();
+}
+
+function _sPlanningHTML(s) {
+  const hookRows = (s.hooks || []).map((h, i) => `
+    <div class="s-hook-row">
+      <input class="s-hook-text" value="${escHtml(h.text)}" placeholder="Hook…"
+        oninput="updateHook('${s.id}',${i},'text',this.value)">
+      <input class="s-hook-source" value="${escHtml(h.source)}" placeholder="Source…"
+        oninput="updateHook('${s.id}',${i},'source',this.value)">
+      <button class="btn-icon" onclick="removeHook('${s.id}',${i})">✕</button>
+    </div>`).join('');
+  return `
+    <div class="section-box">
+      <div class="section-title">
+        <span>Active Hooks</span>
+        <button class="btn-small" onclick="addHook('${s.id}')">+ Add</button>
+      </div>
+      <div class="s-hooks-list" id="s-hooks-${s.id}">${hookRows}</div>
+    </div>
+    <div class="section-box">
+      <div class="section-title">Planned</div>
+      <textarea class="section-textarea" placeholder="What the GM prepared…"
+        oninput="updateSessionField('${s.id}','planned',this.value)">${escHtml(s.planned)}</textarea>
+    </div>`;
+}
+
+function addHook(sid) {
+  const s = state.sessions.find(s => s.id === sid); if (!s) return;
+  if (!Array.isArray(s.hooks)) s.hooks = [];
+  s.hooks.push({ text: '', source: '' }); save();
+  const i = s.hooks.length - 1;
+  const list = document.getElementById('s-hooks-' + sid); if (!list) return;
+  const row = document.createElement('div');
+  row.className = 's-hook-row';
+  row.innerHTML = `
+    <input class="s-hook-text" value="" placeholder="Hook…"
+      oninput="updateHook('${sid}',${i},'text',this.value)">
+    <input class="s-hook-source" value="" placeholder="Source…"
+      oninput="updateHook('${sid}',${i},'source',this.value)">
+    <button class="btn-icon" onclick="removeHook('${sid}',${i})">✕</button>`;
+  list.appendChild(row);
+  row.querySelector('input').focus();
+}
+
+function removeHook(sid, i) {
+  const s = state.sessions.find(s => s.id === sid); if (!s) return;
+  s.hooks.splice(i, 1); save();
+  const list = document.getElementById('s-hooks-' + sid); if (!list) return;
+  list.innerHTML = s.hooks.map((h, j) => `
+    <div class="s-hook-row">
+      <input class="s-hook-text" value="${escHtml(h.text)}" placeholder="Hook…"
+        oninput="updateHook('${sid}',${j},'text',this.value)">
+      <input class="s-hook-source" value="${escHtml(h.source)}" placeholder="Source…"
+        oninput="updateHook('${sid}',${j},'source',this.value)">
+      <button class="btn-icon" onclick="removeHook('${sid}',${j})">✕</button>
+    </div>`).join('');
+}
+
+function updateHook(sid, i, field, val) {
+  const s = state.sessions.find(s => s.id === sid); if (!s || !s.hooks[i]) return;
+  s.hooks[i][field] = val; save();
+}
+
+function _sPlayHTML(s) {
+  return `
+    <div class="section-box">
+      <div class="section-title">Actual Play Notes</div>
+      <textarea class="section-textarea" placeholder="What actually happened…"
+        oninput="updateSessionField('${s.id}','actual',this.value)">${escHtml(s.actual)}</textarea>
+    </div>`;
+}
+
+function _sNarrativeHTML(s) {
+  return `
+    <div class="section-box">
+      <div class="section-title">Location</div>
+      <div style="padding:8px 12px">
+        <input class="field-input" value="${escHtml(s.location)}" placeholder="Region or starting point…"
+          oninput="updateSessionField('${s.id}','location',this.value)">
+      </div>
+    </div>
+    <div class="section-box">
+      <div class="section-title">Report</div>
+      <textarea class="s-report-textarea" placeholder="In-world narrative, player perspective…"
+        oninput="updateSessionField('${s.id}','report',this.value)">${escHtml(s.report)}</textarea>
+    </div>
+    <div class="section-box">
+      <div class="section-title">GM Notes</div>
+      <textarea class="s-gmnotes-textarea" placeholder="Hidden GM analysis…"
+        oninput="updateSessionField('${s.id}','gmNotes',this.value)">${escHtml(s.gmNotes)}</textarea>
+    </div>`;
+}
+
+// ── Sessions — Tagged lists ───────────────────────────────────────────────────
+
+const _sTlistPH = {
+  factionsEncountered: ['Faction or NPC…', 'NPC name…'],
+  loot:                ['Item…',           'Notes…'],
+  casualties:          ['Character…',      'Details…'],
+  misc:                ['Note…',           'Detail…'],
+};
+
+function _sTlistRowHTML(sid, listName, i, item) {
+  const rmBtn = `<button class="btn-icon" onclick="removeListItem('${sid}','${listName}',${i})">✕</button>`;
+  if (typeof item === 'string') {
+    return `<input class="s-tlist-main" value="${escHtml(item)}" placeholder="Hex key or name…"
+      oninput="updateListItem('${sid}','${listName}',${i},null,this.value)">${rmBtn}`;
+  }
+  const [pt, ps] = _sTlistPH[listName] || ['Entry…', 'Detail…'];
+  return `<input class="s-tlist-main" value="${escHtml(item.text)}" placeholder="${pt}"
+      oninput="updateListItem('${sid}','${listName}',${i},'text',this.value)">
+    <input class="s-tlist-sub" value="${escHtml(item.sub)}" placeholder="${ps}"
+      oninput="updateListItem('${sid}','${listName}',${i},'sub',this.value)">${rmBtn}`;
+}
+
+function _sTlistInner(s, listName) {
+  const rows = s[listName].map((item, i) =>
+    '<div class="s-tlist-row">' + _sTlistRowHTML(s.id, listName, i, item) + '</div>'
+  ).join('');
+  return `<div style="display:flex;justify-content:flex-end;padding:4px 0 6px">
+      <button class="btn-small" onclick="addListItem('${s.id}','${listName}')">+ Add</button>
+    </div>
+    <div class="s-tlist" id="s-tlist-${s.id}-${listName}">${rows}</div>`;
+}
+
+function _sTaggedListsHTML(s) {
+  return [
+    _sSec(s.id, 'tagged-hexes',      'Hexes Visited',              _sTlistInner(s, 'hexesVisited')),
+    _sSec(s.id, 'tagged-factions',   'Factions & NPCs Encountered', _sTlistInner(s, 'factionsEncountered')),
+    _sSec(s.id, 'tagged-loot',       'Loot',                       _sTlistInner(s, 'loot')),
+    _sSec(s.id, 'tagged-casualties', 'Casualties',                  _sTlistInner(s, 'casualties')),
+    _sSec(s.id, 'tagged-misc',       'Misc',                       _sTlistInner(s, 'misc')),
+  ].join('');
+}
+
+function addListItem(sid, listName) {
+  const s = state.sessions.find(s => s.id === sid); if (!s) return;
+  const item = (listName === 'hexesVisited') ? '' : { text: '', sub: '' };
+  s[listName].push(item); save();
+  const i = s[listName].length - 1;
+  const container = document.getElementById('s-tlist-' + sid + '-' + listName);
+  if (!container) return;
+  const row = document.createElement('div');
+  row.className = 's-tlist-row';
+  row.innerHTML = _sTlistRowHTML(sid, listName, i, s[listName][i]);
+  container.appendChild(row);
+  row.querySelector('input').focus();
+}
+
+function updateListItem(sid, listName, i, field, val) {
+  const s = state.sessions.find(s => s.id === sid); if (!s) return;
+  if (field === null) s[listName][i] = val;
+  else s[listName][i][field] = val;
+  save();
+}
+
+function removeListItem(sid, listName, i) {
+  const s = state.sessions.find(s => s.id === sid); if (!s) return;
+  s[listName].splice(i, 1); save();
+  const container = document.getElementById('s-tlist-' + sid + '-' + listName);
+  if (!container) return;
+  container.innerHTML = s[listName].map((item, j) =>
+    '<div class="s-tlist-row">' + _sTlistRowHTML(sid, listName, j, item) + '</div>'
+  ).join('');
+}
+
+function renderSessionDetail(s) {
+  document.getElementById('s-empty').classList.add('hidden');
+  const detail = document.getElementById('s-detail');
+  detail.classList.remove('hidden');
+  detail.innerHTML = `
+    <div class="s-card">
+      <div class="s-card-header">
+        <div class="s-title-group">
+          <input class="s-title-input" value="${escHtml(s.title)}" placeholder="Session title…"
+            oninput="updateSessionField('${s.id}','title',this.value)">
+          <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+            <input class="s-date-input" value="${escHtml(s.date)}" placeholder="Date…"
+              oninput="updateSessionField('${s.id}','date',this.value)">
+            <div class="known-toggle" onclick="toggleSessionVisible('${s.id}')">
+              <div class="toggle-track${s.playerVisible ? ' on' : ''}" id="s-visible-track-${s.id}">
+                <div class="toggle-thumb"></div>
+              </div>
+              <span id="s-visible-lbl-${s.id}">${s.playerVisible ? 'Player visible' : 'Hidden from players'}</span>
+            </div>
+          </div>
+        </div>
+        <button class="btn-danger" onclick="deleteSession('${s.id}')">Delete</button>
+      </div>
+      ${_sAttendHTML(s)}
+      ${_sSec(s.id, 'planning', 'Planning', _sPlanningHTML(s))}
+      ${_sSec(s.id, 'play', 'Play', _sPlayHTML(s))}
+      ${_sSec(s.id, 'narrative', 'Narrative', _sNarrativeHTML(s))}
+      ${_sSec(s.id, 'tagged', 'Tagged Lists', _sTaggedListsHTML(s))}
+    </div>`;
+}
+
 // ── Players — Constants ───────────────────────────────────────────────────────
 
 const PLAYER_COLORS = [
@@ -1178,6 +1657,7 @@ function newPlayer() {
 
 function deletePlayer(id) {
   if (!confirm('Delete this player?')) return;
+  state.sessions.forEach(s => { delete s.attendance[id]; });
   state.players = state.players.filter(p => p.id !== id);
   if (state.ui.activePlayerId === id) state.ui.activePlayerId = null;
   save(); renderPlayerSidebar(); renderPlayerDetail(null);
