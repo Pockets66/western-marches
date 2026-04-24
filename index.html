@@ -543,6 +543,42 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
 /* ── NPCs panel ──────────────────────────────────────────────────────────── */
 #panel-npcs { align-items: stretch; overflow: hidden;
   font-size: inherit; letter-spacing: normal; text-transform: none; color: var(--text); }
+.npc-filters {
+  padding: 8px 10px; border-bottom: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 6px; flex-shrink: 0;
+}
+.npc-search {
+  background: rgba(0,0,0,0.2); border: 1px solid var(--border); color: var(--text);
+  font-family: 'Crimson Pro', Georgia, serif; font-size: 0.85rem;
+  padding: 5px 8px; outline: none; width: 100%;
+}
+.npc-search:focus { border-color: var(--gold-dim); }
+.npc-search::placeholder { color: var(--text-muted); font-style: italic; }
+.npc-known-btn {
+  font-family: 'Cinzel', serif; font-size: 0.56rem; letter-spacing: 0.08em;
+  text-transform: uppercase; padding: 4px 8px; border: 1px solid var(--border-lit);
+  background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.15s; text-align: left;
+}
+.npc-known-btn:hover { color: var(--text); border-color: var(--gold-dim); }
+.npc-known-btn.active { border-color: var(--gold); color: var(--gold-pale); background: rgba(200,151,42,0.1); }
+.npc-disp-row { display: flex; gap: 4px; flex-wrap: wrap; }
+.npc-disp-pill {
+  font-family: 'Cinzel', serif; font-size: 0.54rem; letter-spacing: 0.07em;
+  text-transform: uppercase; padding: 3px 8px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.15s;
+}
+.npc-disp-pill:hover { color: var(--text); }
+.npc-disp-pill.friendly.active { border-color: #4a9a50; color: #7cbc80; background: rgba(74,154,80,0.12); }
+.npc-disp-pill.neutral.active  { border-color: #808080; color: #a0a0a0; background: rgba(128,128,128,0.1); }
+.npc-disp-pill.hostile.active  { border-color: var(--red); color: #e06060; background: rgba(154,32,32,0.12); }
+.npc-disp-pill.unknown.active  { border-color: var(--border-lit); color: var(--text-dim); background: rgba(100,90,80,0.1); }
+.npc-secrets-textarea {
+  width: 100%; min-height: 90px; background: rgba(154,32,32,0.06); border: none;
+  border-top: 2px solid var(--red-dim); outline: none; color: var(--text);
+  font-family: 'Crimson Pro', Georgia, serif; font-size: 0.88rem;
+  line-height: 1.6; padding: 12px; resize: vertical;
+}
+.npc-secrets-textarea::placeholder { color: var(--text-muted); font-style: italic; }
 
 /* ── Players panel ───────────────────────────────────────────────────────── */
 #panel-players { align-items: stretch; overflow: hidden;
@@ -867,6 +903,16 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
       <div class="sidebar-header">
         <span>NPCs</span>
         <button class="btn-small" onclick="newNpc()">+ New NPC</button>
+      </div>
+      <div class="npc-filters">
+        <input class="npc-search" type="text" id="npc-search-inp"
+          placeholder="Search by name…" oninput="_npcSearchChange(this.value)">
+        <select class="rumor-select" id="npc-faction-sel"
+          onchange="_npcFactionChange(this.value)">
+          <option value="">All factions</option>
+        </select>
+        <button class="npc-known-btn" id="npc-known-btn"
+          onclick="_npcToggleKnown()">Player-known only</button>
       </div>
       <div class="sidebar-list" id="npc-list"></div>
     </div>
@@ -2680,25 +2726,64 @@ function goToTab(tabName, contextUpdates) {
 
 // ── NPCs ──────────────────────────────────────────────────────────────────────
 
+let _npcSearch    = '';
+let _npcFaction   = '';
+let _npcKnownOnly = false;
+
+function _npcSearchChange(val) { _npcSearch = val; renderNpcSidebar(); }
+function _npcFactionChange(val) { _npcFaction = val; renderNpcSidebar(); }
+function _npcToggleKnown() {
+  _npcKnownOnly = !_npcKnownOnly;
+  const btn = document.getElementById('npc-known-btn');
+  if (btn) btn.classList.toggle('active', _npcKnownOnly);
+  renderNpcSidebar();
+}
+
+const _NPC_DIP_COLORS = { friendly: '#4a9a50', neutral: '#808080', hostile: '#9a2020' };
+
 function renderNpcSidebar() {
   const list = document.getElementById('npc-list'); if (!list) return;
-  const sorted = state.npcs.slice().sort((a, b) =>
-    (a.name || '').localeCompare(b.name || '')
-  );
-  if (!sorted.length) {
-    list.innerHTML = '<div style="padding:16px;color:var(--text-muted);font-size:0.85rem;font-style:italic;text-align:center">No NPCs yet.</div>';
+  const fsel = document.getElementById('npc-faction-sel');
+  if (fsel) {
+    const cur = _npcFaction;
+    fsel.innerHTML = '<option value="">All factions</option>' +
+      state.factions.map(f =>
+        `<option value="${f.id}">${escHtml(f.name)}</option>`
+      ).join('') +
+      '<option value="independent">Independent only</option>';
+    fsel.value = cur;
+  }
+  if (!state.npcs.length) {
+    list.innerHTML = '<div style="padding:16px;color:var(--text-muted);font-size:0.85rem;font-style:italic;text-align:center">No NPCs yet. Click + New NPC to begin.</div>';
     return;
   }
-  list.innerHTML = sorted.map(n => {
+  let npcs = state.npcs.slice();
+  if (_npcSearch.trim()) {
+    const q = _npcSearch.toLowerCase();
+    npcs = npcs.filter(n => (n.name || '').toLowerCase().includes(q));
+  }
+  if (_npcFaction === 'independent') npcs = npcs.filter(n => !n.factionId);
+  else if (_npcFaction) npcs = npcs.filter(n => n.factionId === _npcFaction);
+  if (_npcKnownOnly) npcs = npcs.filter(n => n.playerKnown);
+  npcs.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  if (!npcs.length) {
+    list.innerHTML = '<div style="padding:16px;color:var(--text-muted);font-size:0.85rem;font-style:italic;text-align:center">No NPCs match these filters.</div>';
+    return;
+  }
+  list.innerHTML = npcs.map(n => {
     const faction = n.factionId ? state.factions.find(f => f.id === n.factionId) : null;
     const dot     = faction ? faction.color : '#6a6060';
-    const nameHtml = n.name
-      ? escHtml(n.name)
-      : '<em style="color:var(--text-muted)">Unnamed</em>';
-    return `<div class="p-item${n.id === state.ui.activeNpcId ? ' active' : ''}"
-        onclick="selectNpc('${n.id}')">
+    const nameHtml = n.name ? escHtml(n.name) : '<em style="color:var(--text-muted)">Unnamed</em>';
+    const pipCol   = _NPC_DIP_COLORS[n.disposition];
+    const pip      = pipCol
+      ? `<div style="width:8px;height:8px;border-radius:50%;background:${pipCol};flex-shrink:0"></div>` : '';
+    return `<div class="p-item${n.id === state.ui.activeNpcId ? ' active' : ''}" onclick="selectNpc('${n.id}')">
       <div class="faction-dot" style="background:${dot}"></div>
-      <div class="p-item-name">${nameHtml}</div>
+      <div style="flex:1;min-width:0">
+        <div class="p-item-name">${nameHtml}</div>
+        ${n.role ? `<div style="font-size:0.72rem;color:var(--text-muted);line-height:1.3">${escHtml(n.role)}</div>` : ''}
+      </div>
+      ${pip}
     </div>`;
   }).join('');
 }
@@ -2707,7 +2792,8 @@ function selectNpc(id) {
   state.ui.activeNpcId = id;
   save();
   renderNpcSidebar();
-  // full renderNpcDetail() wired in Stage 2
+  const n = state.npcs.find(n => n.id === id);
+  if (n) renderNpcDetail(n);
 }
 
 function newNpc() {
@@ -2717,7 +2803,119 @@ function newNpc() {
     disposition: 'unknown', description: '', secrets: '', playerKnown: false,
   };
   state.npcs.push(n);
+  save();
   goToTab('npcs', { activeNpcId: n.id });
+}
+
+function renderNpcDetail(n) {
+  document.getElementById('npc-empty').classList.add('hidden');
+  const detail = document.getElementById('npc-detail');
+  detail.classList.remove('hidden');
+  const factionOpts = `<option value="">Independent</option>` +
+    state.factions.map(f =>
+      `<option value="${f.id}"${n.factionId===f.id?' selected':''}>${escHtml(f.name)}</option>`
+    ).join('');
+  const dispPills = ['friendly','neutral','hostile','unknown'].map(d =>
+    `<button class="npc-disp-pill ${d}${n.disposition===d?' active':''}"
+        onclick="setNpcDisposition('${n.id}','${d}')">${d.charAt(0).toUpperCase()+d.slice(1)}</button>`
+  ).join('');
+  detail.innerHTML = `
+    <div style="max-width:860px">
+      <div style="padding:20px 24px 0">
+        <input class="faction-name-input" value="${escHtml(n.name)}" placeholder="NPC name…"
+          oninput="updateNpcField('${n.id}','name',this.value)">
+      </div>
+      <div class="sections-grid" style="padding:16px 24px 24px">
+        <div class="section-box section-full">
+          <div class="section-title">Identity</div>
+          <div style="padding:12px;display:flex;flex-direction:column;gap:10px">
+            <div class="field-group">
+              <div class="field-label">Role / Profession</div>
+              <input class="field-input" value="${escHtml(n.role)}"
+                placeholder="Captain, Innkeeper, Retired Wizard…"
+                oninput="updateNpcField('${n.id}','role',this.value)">
+            </div>
+            <div class="field-group">
+              <div class="field-label">Faction</div>
+              <select class="field-input"
+                onchange="updateNpcField('${n.id}','factionId',this.value||null)">${factionOpts}</select>
+            </div>
+            <div class="field-group">
+              <div class="field-label">Disposition</div>
+              <div class="npc-disp-row">${dispPills}</div>
+            </div>
+            <div class="known-toggle" onclick="toggleNpcKnown('${n.id}')">
+              <div class="toggle-track${n.playerKnown?' on':''}" id="npc-kt-${n.id}">
+                <div class="toggle-thumb"></div>
+              </div>
+              <span id="npc-kl-${n.id}">${n.playerKnown?'Players know this NPC':'Hidden from players'}</span>
+            </div>
+          </div>
+        </div>
+        <div class="section-box section-full">
+          <div class="section-title">Description</div>
+          <textarea class="section-textarea" placeholder="Physical appearance, voice, mannerisms…"
+            oninput="updateNpcField('${n.id}','description',this.value)">${escHtml(n.description)}</textarea>
+        </div>
+        <div class="section-box section-full">
+          <div class="section-title">Notes</div>
+          <textarea class="section-textarea" placeholder="General notes, backstory, motivations…"
+            oninput="updateNpcField('${n.id}','notes',this.value)">${escHtml(n.notes)}</textarea>
+        </div>
+        <div class="section-box section-full" style="border-color:var(--red-dim)">
+          <div class="section-title" style="color:var(--red)">
+            Secrets <span style="font-size:0.85em;color:var(--red-dim);text-transform:none;font-family:'Crimson Pro',serif;letter-spacing:0">(GM only)</span>
+          </div>
+          <textarea class="npc-secrets-textarea"
+            placeholder="What does this NPC know? (GM-only — never shown to players)"
+            oninput="updateNpcField('${n.id}','secrets',this.value)">${escHtml(n.secrets)}</textarea>
+        </div>
+        <div class="card-actions section-full">
+          <button class="btn-danger" onclick="deleteNpc('${n.id}')">Delete NPC</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function updateNpcField(id, field, value) {
+  const n = state.npcs.find(n => n.id === id); if (!n) return;
+  n[field] = value; save();
+  if (field === 'name' || field === 'role' || field === 'factionId') renderNpcSidebar();
+}
+
+function setNpcDisposition(id, disp) {
+  const n = state.npcs.find(n => n.id === id); if (!n) return;
+  n.disposition = disp; save();
+  document.querySelectorAll('#npc-detail .npc-disp-pill').forEach(p => {
+    p.classList.toggle('active', p.classList.contains(disp));
+  });
+  renderNpcSidebar();
+}
+
+function toggleNpcKnown(id) {
+  const n = state.npcs.find(n => n.id === id); if (!n) return;
+  n.playerKnown = !n.playerKnown; save();
+  const track = document.getElementById('npc-kt-' + id);
+  if (track) track.classList.toggle('on', n.playerKnown);
+  const lbl = document.getElementById('npc-kl-' + id);
+  if (lbl) lbl.textContent = n.playerKnown ? 'Players know this NPC' : 'Hidden from players';
+  renderNpcSidebar();
+}
+
+function deleteNpc(id) {
+  if (!confirm('Delete this NPC? This cannot be undone.')) return;
+  state.rumors.forEach(r => { if (r.npcSourceId === id) r.npcSourceId = null; });
+  state.quests.forEach(q => { if (q.giverNpcId === id) q.giverNpcId = null; });
+  state.events.forEach(e => { e.npcIds = (e.npcIds || []).filter(nid => nid !== id); });
+  state.npcs = state.npcs.filter(n => n.id !== id);
+  if (state.ui.activeNpcId === id) {
+    state.ui.activeNpcId = null;
+    document.getElementById('npc-empty').classList.remove('hidden');
+    const det = document.getElementById('npc-detail');
+    det.classList.add('hidden'); det.innerHTML = '';
+  }
+  save(); renderNpcSidebar();
+  toast('NPC removed.');
 }
 
 // ── Players — Constants ───────────────────────────────────────────────────────
