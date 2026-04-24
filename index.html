@@ -451,6 +451,93 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
 .rumors-pane::-webkit-scrollbar-track { background: var(--panel-mid); }
 .rumors-pane::-webkit-scrollbar-thumb { background: var(--border-lit); }
 .rumors-pane::-webkit-scrollbar-thumb:hover { background: var(--gold-dim); }
+.rumors-filter-bar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.rumors-filter-btn {
+  font-family: 'Cinzel', serif; font-size: 0.6rem; letter-spacing: 0.1em;
+  text-transform: uppercase; padding: 4px 10px; background: transparent;
+  border: 1px solid var(--border); color: var(--text-muted); cursor: pointer; transition: all 0.15s;
+}
+.rumors-filter-btn:hover { border-color: var(--gold-dim); color: var(--text); }
+.rumors-filter-btn.active { border-color: var(--gold); color: var(--gold-pale); background: rgba(200,151,42,0.1); }
+.rumors-sort-hint { font-family: 'Crimson Pro', serif; font-size: 0.78rem; color: var(--text-muted); font-style: italic; }
+.rumors-sort-btn {
+  font-family: 'Cinzel', serif; font-size: 0.58rem; letter-spacing: 0.08em;
+  text-transform: uppercase; padding: 4px 10px; background: transparent;
+  border: 1px solid var(--border-lit); color: var(--text-muted); cursor: pointer;
+  transition: all 0.15s; margin-left: auto; white-space: nowrap;
+}
+.rumors-sort-btn:hover { border-color: var(--gold-dim); color: var(--gold-dim); }
+.rumors-sort-btn.urgency { border-color: var(--gold-dim); color: var(--gold-dim); }
+.rumors-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 14px; }
+.rumor-card {
+  background: var(--panel-mid); border: 1px solid var(--border); border-top-width: 3px;
+  border-top-color: transparent; display: flex; flex-direction: column; gap: 9px;
+  padding: 12px; position: relative;
+}
+.rumor-card.archived { opacity: 0.75; }
+.rumor-archived-badge {
+  position: absolute; top: 5px; right: 8px; font-family: 'Cinzel', serif;
+  font-size: 0.48rem; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--text-muted); background: rgba(0,0,0,0.3); padding: 1px 5px;
+}
+.rumor-status-pills { display: flex; gap: 4px; flex-wrap: wrap; }
+.rumor-status-pill {
+  font-family: 'Cinzel', serif; font-size: 0.54rem; letter-spacing: 0.07em;
+  text-transform: uppercase; padding: 3px 8px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.15s;
+}
+.rumor-status-pill:hover { border-color: var(--border-lit); color: var(--text); }
+.rumor-status-pill.unverified.active { border-color: var(--border-lit); color: var(--text); background: rgba(160,144,112,0.12); }
+.rumor-status-pill.confirmed.active  { border-color: #4a9a50; color: #7cbc80; background: rgba(74,154,80,0.12); }
+.rumor-status-pill.false.active      { border-color: var(--red); color: #e06060; background: rgba(154,32,32,0.12); }
+.rumor-urgency-row { display: flex; gap: 4px; flex-wrap: wrap; }
+.rumor-urgency-pill {
+  font-family: 'Cinzel', serif; font-size: 0.52rem; letter-spacing: 0.07em;
+  text-transform: uppercase; padding: 2px 7px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.15s;
+}
+.rumor-urgency-pill:hover { color: var(--text); }
+.rumor-urgency-pill.low.active      { border-color: var(--text-dim); color: var(--text-dim); }
+.rumor-urgency-pill.medium.active   { border-color: var(--gold-dim); color: var(--gold-dim); }
+.rumor-urgency-pill.high.active     { border-color: #c07820; color: #c07820; }
+.rumor-urgency-pill.critical.active { border-color: var(--red); color: #e06060; background: rgba(154,32,32,0.1); }
+.rumor-text {
+  width: 100%; min-height: 68px; background: rgba(0,0,0,0.15); border: 1px solid var(--border);
+  color: var(--text); font-family: 'Crimson Pro', Georgia, serif; font-size: 0.9rem;
+  line-height: 1.55; padding: 7px 9px; outline: none; resize: vertical;
+}
+.rumor-text:focus { border-color: var(--gold-dim); }
+.rumor-text::placeholder { color: var(--text-muted); font-style: italic; }
+.rumor-links { display: flex; flex-direction: column; gap: 5px; }
+.rumor-select {
+  background: rgba(0,0,0,0.2); border: 1px solid var(--border); color: var(--text-dim);
+  font-family: 'Crimson Pro', Georgia, serif; font-size: 0.82rem;
+  padding: 3px 6px; outline: none; width: 100%; cursor: pointer;
+}
+.rumor-select:focus { border-color: var(--gold-dim); }
+.rumor-footer { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.rumor-player-pill {
+  font-family: 'Cinzel', serif; font-size: 0.52rem; letter-spacing: 0.07em;
+  text-transform: uppercase; padding: 3px 7px; border: 1px solid var(--border-lit);
+  background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.15s;
+}
+.rumor-player-pill:hover { color: var(--text); }
+.rumor-player-pill.on { border-color: var(--gold); color: var(--gold-pale); background: rgba(200,151,42,0.1); }
+.rumor-archive-btn {
+  font-family: 'Cinzel', serif; font-size: 0.52rem; letter-spacing: 0.07em;
+  text-transform: uppercase; padding: 3px 7px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.15s;
+}
+.rumor-archive-btn:hover { border-color: var(--gold-dim); color: var(--gold-dim); }
+.rumor-archive-btn.unarchive { border-color: var(--green); color: #7cbc80; }
+.rumor-archive-btn.unarchive:hover { background: rgba(42,106,48,0.12); }
+.rumor-new-card {
+  border: 2px dashed var(--border-lit); display: flex; align-items: center;
+  justify-content: center; min-height: 120px; cursor: pointer; transition: all 0.15s;
+  color: var(--text-muted); font-family: 'Cinzel', serif; font-size: 0.65rem;
+  letter-spacing: 0.12em; text-transform: uppercase;
+}
+.rumor-new-card:hover { border-color: var(--gold-dim); color: var(--gold-dim); background: rgba(200,151,42,0.04); }
 
 /* ── Players panel ───────────────────────────────────────────────────────── */
 #panel-players { align-items: stretch; overflow: hidden;
@@ -1075,6 +1162,10 @@ function switchTab(tab) {
   if (tab === 'map') {
     renderMapPanel();
   }
+  if (tab === 'rumors') {
+    renderRumorsActive();
+    renderRumorsArchived();
+  }
   if (tab === 'sessions') {
     renderSessionSidebar();
     if (state.ui.activeSessionId) {
@@ -1593,6 +1684,189 @@ function switchRumorsSubtab(sub) {
   });
   document.getElementById('rumors-active-pane').classList.toggle('hidden', sub !== 'active');
   document.getElementById('rumors-archived-pane').classList.toggle('hidden', sub !== 'archived');
+  if (sub === 'active') renderRumorsActive();
+  else renderRumorsArchived();
+}
+
+// ── Rumors — constants & helpers ─────────────────────────────────────────────
+
+const URGENCY_ORDER = { critical: 0, high: 1, medium: 2, low: 3 };
+
+let _rumorSort = 'newest'; // 'newest' | 'urgency'
+
+function toggleRumorSort() {
+  _rumorSort = _rumorSort === 'newest' ? 'urgency' : 'newest';
+  renderRumorsActive();
+}
+
+function _sortRumors(arr) {
+  return arr.slice().sort((a, b) => {
+    if (_rumorSort === 'urgency') {
+      const ud = (URGENCY_ORDER[a.urgency] ?? 99) - (URGENCY_ORDER[b.urgency] ?? 99);
+      if (ud !== 0) return ud;
+    }
+    if (b.createdAt > a.createdAt) return 1;
+    if (a.createdAt > b.createdAt) return -1;
+    if (_rumorSort === 'newest') {
+      const ud = (URGENCY_ORDER[a.urgency] ?? 99) - (URGENCY_ORDER[b.urgency] ?? 99);
+      if (ud !== 0) return ud;
+    }
+    return a.id < b.id ? -1 : 1;
+  });
+}
+
+function _rumorCard(r, isArchived) {
+  const faction   = r.factionId    ? state.factions.find(f => f.id === r.factionId)    : null;
+  const topColor  = faction ? escHtml(faction.color) : 'transparent';
+
+  const statusPills = ['unverified','confirmed','false'].map(s =>
+    `<button class="rumor-status-pill ${s}${r.status===s?' active':''}"
+        onclick="setRumorStatus('${r.id}','${s}')">${s.charAt(0).toUpperCase()+s.slice(1)}</button>`
+  ).join('');
+
+  const urgencyPills = ['low','medium','high','critical'].map(u =>
+    `<button class="rumor-urgency-pill ${u}${r.urgency===u?' active':''}"
+        onclick="setRumorUrgency('${r.id}','${u}')">${u.charAt(0).toUpperCase()+u.slice(1)}</button>`
+  ).join('');
+
+  const factionOpts = `<option value="">No faction link</option>` +
+    state.factions.map(f =>
+      `<option value="${f.id}"${r.factionId===f.id?' selected':''}>${escHtml(f.name)}</option>`
+    ).join('');
+
+  const npcOpts = `<option value="">No NPC source</option>` +
+    state.npcs.map(n => {
+      const fn = n.factionId ? state.factions.find(f => f.id === n.factionId) : null;
+      return `<option value="${n.id}"${r.npcSourceId===n.id?' selected':''}>${escHtml(fn ? n.name+' ('+fn.name+')' : n.name)}</option>`;
+    }).join('');
+
+  const archiveBtn = isArchived
+    ? `<button class="rumor-archive-btn unarchive" onclick="unarchiveRumor('${r.id}')">Unarchive</button>`
+    : `<button class="rumor-archive-btn" onclick="archiveRumor('${r.id}')">Archive</button>`;
+
+  const badge = isArchived ? `<span class="rumor-archived-badge">Archived</span>` : '';
+
+  return `<div class="rumor-card${isArchived?' archived':''}" id="rcard-${r.id}" style="border-top-color:${topColor}">
+    ${badge}
+    <div class="rumor-status-pills">${statusPills}</div>
+    <div class="rumor-urgency-row">${urgencyPills}</div>
+    <textarea class="rumor-text" placeholder="Write the rumor as the players might hear it…"
+      oninput="updateRumorField('${r.id}','text',this.value)">${escHtml(r.text)}</textarea>
+    <div class="rumor-links">
+      <select class="rumor-select" onchange="updateRumorField('${r.id}','factionId',this.value||null)">${factionOpts}</select>
+      <select class="rumor-select" onchange="updateRumorField('${r.id}','npcSourceId',this.value||null)">${npcOpts}</select>
+    </div>
+    <div class="rumor-footer">
+      <button class="rumor-player-pill${r.playerKnown?' on':''}" onclick="toggleRumorKnown('${r.id}')">
+        ${r.playerKnown ? '⚑ Players Know' : '◎ Hidden'}
+      </button>
+      ${archiveBtn}
+      <button class="btn-icon" style="margin-left:auto" onclick="deleteRumor('${r.id}')">✕</button>
+    </div>
+  </div>`;
+}
+
+// ── Rumors — render ───────────────────────────────────────────────────────────
+
+function renderRumorsActive() {
+  const pane = document.getElementById('rumors-active-pane'); if (!pane) return;
+  const filter = state.ui.rumorFilter || '';
+  let rumors = state.rumors.filter(r => !r.archived);
+  if      (filter === 'unverified') rumors = rumors.filter(r => r.status === 'unverified');
+  else if (filter === 'confirmed')  rumors = rumors.filter(r => r.status === 'confirmed');
+  else if (filter === 'false')      rumors = rumors.filter(r => r.status === 'false');
+  else if (filter === 'known')      rumors = rumors.filter(r => r.playerKnown);
+  rumors = _sortRumors(rumors);
+
+  const filters = [['','All'],['unverified','Unverified'],['confirmed','Confirmed'],['false','False'],['known','Player Known']];
+  const filterBar = filters.map(([f,l]) =>
+    `<button class="rumors-filter-btn${filter===f?' active':''}" onclick="setRumorFilter('${f}')">${l}</button>`
+  ).join('');
+  const sortLabel = _rumorSort === 'urgency' ? 'Sort: Urgency' : 'Sort: Newest';
+  const sortHint  = _rumorSort === 'urgency' ? 'Sorted by urgency (critical first), then newest.' : 'Sorted by newest first, then urgency.';
+
+  const cards = rumors.map(r => _rumorCard(r, false)).join('');
+  const newCard = `<div class="rumor-new-card" onclick="newRumor()">+ New Rumor</div>`;
+
+  pane.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+      <div class="rumors-filter-bar" style="margin-bottom:0;flex:1;min-width:0">${filterBar}</div>
+      <button class="rumors-sort-btn${_rumorSort==='urgency'?' urgency':''}" onclick="toggleRumorSort()">${sortLabel}</button>
+    </div>
+    <div class="rumors-sort-hint" style="margin-bottom:14px">${sortHint}</div>
+    <div class="rumors-grid">${newCard}${cards}</div>`;
+}
+
+function renderRumorsArchived() {
+  const pane = document.getElementById('rumors-archived-pane'); if (!pane) return;
+  const rumors = _sortRumors(state.rumors.filter(r => r.archived));
+  if (!rumors.length) {
+    pane.innerHTML = '<div class="empty-state"><div class="glyph">✦</div><p>No archived rumors.</p></div>';
+    return;
+  }
+  pane.innerHTML = `<div class="rumors-grid">${rumors.map(r => _rumorCard(r, true)).join('')}</div>`;
+}
+
+// ── Rumors — CRUD ─────────────────────────────────────────────────────────────
+
+function newRumor() {
+  const r = {
+    id: uid(), text: '', status: 'unverified', urgency: 'medium',
+    playerKnown: false, factionId: null, npcSourceId: null,
+    pinId: null, hexKey: null, archived: false,
+    createdAt: new Date().toISOString(), archivedAt: null,
+  };
+  state.rumors.push(r); save();
+  renderRumorsActive();
+}
+
+function updateRumorField(id, field, value) {
+  const r = state.rumors.find(r => r.id === id); if (!r) return;
+  r[field] = value; save();
+  if (field === 'factionId') {
+    const card = document.getElementById('rcard-' + id);
+    if (card) {
+      const f = value ? state.factions.find(f => f.id === value) : null;
+      card.style.borderTopColor = f ? f.color : 'transparent';
+    }
+  }
+}
+
+function setRumorStatus(id, status) {
+  const r = state.rumors.find(r => r.id === id); if (!r) return;
+  r.status = status; save(); renderRumorsActive();
+}
+
+function setRumorUrgency(id, urgency) {
+  const r = state.rumors.find(r => r.id === id); if (!r) return;
+  r.urgency = urgency; save(); renderRumorsActive();
+}
+
+function toggleRumorKnown(id) {
+  const r = state.rumors.find(r => r.id === id); if (!r) return;
+  r.playerKnown = !r.playerKnown; save(); renderRumorsActive();
+}
+
+function archiveRumor(id) {
+  const r = state.rumors.find(r => r.id === id); if (!r) return;
+  r.archived = true; r.archivedAt = new Date().toISOString(); save();
+  renderRumorsActive(); renderRumorsArchived();
+}
+
+function unarchiveRumor(id) {
+  const r = state.rumors.find(r => r.id === id); if (!r) return;
+  r.archived = false; r.archivedAt = null; save();
+  renderRumorsActive(); renderRumorsArchived();
+}
+
+function deleteRumor(id) {
+  if (!confirm('Delete this rumor? This cannot be undone.')) return;
+  state.rumors = state.rumors.filter(r => r.id !== id); save();
+  renderRumorsActive(); renderRumorsArchived();
+}
+
+function setRumorFilter(f) {
+  state.ui.rumorFilter = f; save(); renderRumorsActive();
 }
 
 // ── Factions sub-tabs ─────────────────────────────────────────────────────────
