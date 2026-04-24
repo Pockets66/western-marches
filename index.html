@@ -552,6 +552,41 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
 .s-tlist-sub:focus { border-color: var(--gold-dim); color: var(--text); }
 .s-tlist-main::placeholder, .s-tlist-sub::placeholder { color: var(--text-muted); font-style: italic; }
 
+/* ── Map panel ───────────────────────────────────────────────────────────── */
+#panel-map { flex-direction: column; overflow: hidden; }
+.map-toolbar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 8px 12px; background: rgba(0,0,0,0.2);
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+  font-family: 'Cinzel', serif; font-size: 0.68rem; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--text-muted);
+}
+.map-main { display: flex; flex: 1; overflow: hidden; }
+.map-canvas-wrap {
+  flex: 1; overflow: auto; background: var(--panel);
+  position: relative;
+}
+.map-canvas-wrap::-webkit-scrollbar { width: 8px; height: 8px; }
+.map-canvas-wrap::-webkit-scrollbar-track { background: var(--panel-mid); }
+.map-canvas-wrap::-webkit-scrollbar-thumb { background: var(--border-lit); }
+.map-canvas-wrap::-webkit-scrollbar-thumb:hover { background: var(--gold-dim); }
+#map-canvas { display: block; }
+.map-info-panel {
+  width: 240px; flex-shrink: 0; overflow-y: auto;
+  border-left: 1px solid var(--border); background: var(--panel-mid);
+  padding: 16px; display: flex; flex-direction: column; gap: 12px;
+  font-family: 'Crimson Pro', Georgia, serif; font-size: 0.9rem; color: var(--text);
+}
+.map-info-panel::-webkit-scrollbar { width: 6px; }
+.map-info-panel::-webkit-scrollbar-track { background: var(--panel-mid); }
+.map-info-panel::-webkit-scrollbar-thumb { background: var(--border-lit); }
+.map-statusbar {
+  flex-shrink: 0; padding: 4px 12px;
+  background: rgba(0,0,0,0.25); border-top: 1px solid var(--border);
+  font-family: 'Cinzel', serif; font-size: 0.6rem; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--text-muted);
+}
+
 /* ── Toast & utilities ───────────────────────────────────────────────────── */
 .toast {
   position: fixed; bottom: 20px; right: 20px;
@@ -579,7 +614,20 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
 </header>
 
 <div class="panels">
-  <div class="panel" id="panel-map">[Map]</div>
+  <div class="panel" id="panel-map">
+    <div class="map-toolbar">
+      <span>Map</span>
+    </div>
+    <div class="map-main">
+      <div class="map-canvas-wrap">
+        <canvas id="map-canvas"></canvas>
+      </div>
+      <div class="map-info-panel" id="map-info-panel">
+        <span style="color:var(--text-muted);font-style:italic;font-size:0.85rem">No hex selected.</span>
+      </div>
+    </div>
+    <div class="map-statusbar" id="map-statusbar">MODE: — &nbsp;|&nbsp; BRUSH: — &nbsp;|&nbsp; HEX: —</div>
+  </div>
 
   <div class="panel" id="panel-factions">
     <div class="subtab-bar">
@@ -701,7 +749,7 @@ function toast(msg) {
 const STORAGE_KEY = 'wm_unified_v1';
 
 let state = {
-  schemaVersion: 4,
+  schemaVersion: 5,
   factions:  [],
   npcs:      [],
   rumors:    [],
@@ -712,6 +760,7 @@ let state = {
   hexes:     {},
   pins:      [],
   relations: {},
+  mapMeta:   { cols: 22, rows: 16, hexSize: 32 },
   ui: {
     activeTab:       'map',
     activeFactionId: null,
@@ -739,10 +788,11 @@ function load() {
   try {
     const parsed = JSON.parse(raw);
     const v = parsed.schemaVersion || 1;
-    if (v <= 4) {
+    if (v <= 5) {
       if (v < 2) migrateFactions(parsed);
       if (v < 3) migrateToV3(parsed);
       if (v < 4) migrateToV4(parsed);
+      if (v < 5) migrateToV5(parsed);
       state = parsed;
       if (state.ui && state.ui.activeTab === 'relations') state.ui.activeTab = 'factions';
       if (state.ui && !('activeSessionId' in state.ui)) state.ui.activeSessionId = null;
@@ -798,6 +848,15 @@ function migrateToV4(parsed) {
   parsed.schemaVersion = 4;
 }
 
+function migrateToV5(parsed) {
+  if (!parsed.mapMeta || typeof parsed.mapMeta !== 'object') parsed.mapMeta = {};
+  if (!parsed.mapMeta.cols)    parsed.mapMeta.cols    = 22;
+  if (!parsed.mapMeta.rows)    parsed.mapMeta.rows    = 16;
+  if (!parsed.mapMeta.hexSize) parsed.mapMeta.hexSize = 32;
+  if (!parsed.hexes || typeof parsed.hexes !== 'object') parsed.hexes = {};
+  parsed.schemaVersion = 5;
+}
+
 function migrateFactions(parsed) {
   const activityMap = { dormant: 'dormant', rising: 'active', active: 'active', defeated: 'disbanded' };
   (parsed.factions || []).forEach(f => {
@@ -829,6 +888,9 @@ function switchTab(tab) {
   });
   state.ui.activeTab = tab;
   save();
+  if (tab === 'map') {
+    renderMapPanel();
+  }
   if (tab === 'sessions') {
     renderSessionSidebar();
     if (state.ui.activeSessionId) {
@@ -848,6 +910,22 @@ function switchTab(tab) {
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => switchTab(btn.dataset.tab));
 });
+
+// ── Map ───────────────────────────────────────────────────────────────────────
+
+function renderMapPanel() {
+  const { cols, rows, hexSize } = state.mapMeta;
+  const SQRT3 = Math.sqrt(3);
+  const HW    = SQRT3 * hexSize;
+  const VS    = hexSize * 1.5;
+  const PAD   = 10;
+  const W = Math.ceil(cols * HW + HW / 2 + PAD * 2);
+  const H = Math.ceil(rows * VS + hexSize * 0.5 + PAD * 2);
+  const canvas = document.getElementById('map-canvas');
+  if (!canvas) return;
+  canvas.width  = W;
+  canvas.height = H;
+}
 
 // ── Factions sub-tabs ─────────────────────────────────────────────────────────
 
