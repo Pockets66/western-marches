@@ -55,6 +55,17 @@
   --text:       #e8dcc0;
   --text-dim:   #a09070;
   --text-muted: #706050;
+  --t-plains:      #c8d87a;
+  --t-forest:      #4a7c4e;
+  --t-dark-forest: #2a4d2e;
+  --t-hills:       #a89060;
+  --t-mountain:    #8a7a6a;
+  --t-water:       #4a7090;
+  --t-swamp:       #5a6a3a;
+  --t-desert:      #d4a85a;
+  --t-ruins:       #7a6a80;
+  --t-settled:     #d4b87a;
+  --t-unknown:     #2a2218;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -586,6 +597,22 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
   font-family: 'Cinzel', serif; font-size: 0.6rem; letter-spacing: 0.1em;
   text-transform: uppercase; color: var(--text-muted);
 }
+.map-tbtn {
+  display: flex; align-items: center; gap: 5px; padding: 3px 7px;
+  border: 1px solid var(--border); background: transparent; color: var(--text-dim);
+  font-family: 'Crimson Pro', Georgia, serif; font-size: 0.78rem;
+  cursor: pointer; transition: all 0.13s; white-space: nowrap;
+}
+.map-tbtn:hover  { background: rgba(200,151,42,0.08); border-color: var(--gold-dim); color: var(--text); }
+.map-tbtn.active { background: rgba(200,151,42,0.15); border-color: var(--gold);     color: var(--gold-pale); }
+.map-tswatch { width: 10px; height: 10px; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.12); }
+.map-tool-btn {
+  padding: 3px 10px; border: 1px solid var(--border-lit); background: transparent;
+  color: var(--text-dim); font-family: 'Cinzel', serif; font-size: 0.6rem;
+  letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; transition: all 0.13s;
+}
+.map-tool-btn:hover  { background: rgba(200,151,42,0.1);  border-color: var(--gold-dim); color: var(--text); }
+.map-tool-btn.active { background: rgba(200,151,42,0.18); border-color: var(--gold);     color: var(--gold-pale); }
 
 /* ── Toast & utilities ───────────────────────────────────────────────────── */
 .toast {
@@ -615,7 +642,7 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
 
 <div class="panels">
   <div class="panel" id="panel-map">
-    <div class="map-toolbar">
+    <div class="map-toolbar" id="map-toolbar">
       <span>Map</span>
     </div>
     <div class="map-main">
@@ -911,20 +938,242 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => switchTab(btn.dataset.tab));
 });
 
-// ── Map ───────────────────────────────────────────────────────────────────────
+// ── Map — constants & state ───────────────────────────────────────────────────
+
+const TCOLORS = {
+  unknown: '#2a2218', plains: '#c8d87a', forest: '#4a7c4e', 'dark-forest': '#2a4d2e',
+  hills: '#a89060', mountain: '#8a7a6a', water: '#4a7090', swamp: '#5a6a3a',
+  desert: '#d4a85a', ruins: '#7a6a80', settled: '#d4b87a',
+};
+const TNAMES = {
+  unknown: 'Unknown', plains: 'Plains', forest: 'Forest', 'dark-forest': 'Dark Forest',
+  hills: 'Hills', mountain: 'Mountains', water: 'Water', swamp: 'Swamp',
+  desert: 'Wasteland', ruins: 'Ruins', settled: 'Settled',
+};
+const TICONS = {
+  unknown: '?', plains: '~', forest: '♣', 'dark-forest': '✦', hills: '∧',
+  mountain: '▲', water: '≋', swamp: '⊛', desert: '∿', ruins: '⚔', settled: '⌂',
+};
+const TORDER = ['plains','forest','dark-forest','hills','mountain','water','swamp','desert','ruins','settled','unknown'];
+
+let _mapCurTerrain = 'plains';
+let _mapCurMode    = 'paint';
+let _mapIsDrag     = false;
+let _mapSelHex     = null;
+let _mapHoverHex   = null;
+let _mapReady      = false;
+
+// ── Map — geometry ────────────────────────────────────────────────────────────
+
+function hexCenter(c, r) {
+  const { hexSize } = state.mapMeta;
+  const HW = Math.sqrt(3) * hexSize;
+  return { x: 10 + c*HW + (r%2 ? HW*0.5 : 0) + HW*0.5, y: 10 + r*hexSize*1.5 + hexSize };
+}
+
+function hexCorner(cx, cy, i, s) {
+  const a = Math.PI / 180 * (60*i - 30);
+  return { x: cx + s*Math.cos(a), y: cy + s*Math.sin(a) };
+}
+
+function hexCorners(cx, cy, s) {
+  const p = []; for (let i = 0; i < 6; i++) p.push(hexCorner(cx, cy, i, s)); return p;
+}
+
+function pxToHex(px, py) {
+  const { cols, rows, hexSize } = state.mapMeta;
+  let b = null, bd = Infinity;
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const { x, y } = hexCenter(c, r);
+    const d = (px-x)**2 + (py-y)**2;
+    if (d < bd) { bd = d; b = { col: c, row: r }; }
+  }
+  return b && Math.sqrt(bd) < hexSize * 1.05 ? b : null;
+}
+
+function getHex(c, r) {
+  const k = c + ',' + r;
+  if (!state.hexes[k]) state.hexes[k] = { terrain: 'unknown', name: '', note: '', explored: false };
+  const h = state.hexes[k];
+  if (!('name'     in h)) h.name     = '';
+  if (!('note'     in h)) h.note     = '';
+  if (!('explored' in h)) h.explored = false;
+  return h;
+}
+
+function _blend(h1, h2, t) {
+  const [r1,g1,b1] = [1,3,5].map(i => parseInt(h1.slice(i,i+2),16));
+  const [r2,g2,b2] = [1,3,5].map(i => parseInt(h2.slice(i,i+2),16));
+  return `rgb(${~~(r1+(r2-r1)*t)},${~~(g1+(g2-g1)*t)},${~~(b1+(b2-b1)*t)})`;
+}
+
+// ── Map — drawing ─────────────────────────────────────────────────────────────
+
+function _mapCanvas() { return document.getElementById('map-canvas'); }
+
+function drawWorldHex(c, r) {
+  const canvas = _mapCanvas(); if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const { hexSize } = state.mapMeta;
+  const { x, y } = hexCenter(c, r);
+  const hex = getHex(c, r);
+  const pts = hexCorners(x, y, hexSize - 1);
+  const col = TCOLORS[hex.terrain] || '#2a2218';
+  const isSel = _mapSelHex && _mapSelHex.col === c && _mapSelHex.row === r;
+
+  function hexPath() {
+    ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < 6; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.closePath();
+  }
+
+  hexPath();
+  ctx.fillStyle = (!hex.explored && hex.terrain !== 'unknown') ? _blend(col, '#000000', 0.42) : col;
+  ctx.fill();
+
+  if (hex.explored) {
+    const g = ctx.createRadialGradient(x, y - hexSize*0.1, 0, x, y, hexSize*0.9);
+    g.addColorStop(0, 'rgba(255,255,200,0.07)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; hexPath(); ctx.fill();
+  }
+
+  hexPath();
+  ctx.strokeStyle = isSel ? '#f0c040' : 'rgba(0,0,0,0.32)';
+  ctx.lineWidth = isSel ? 2 : 1;
+  ctx.stroke();
+
+  ctx.fillStyle = hex.terrain === 'unknown' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.38)';
+  ctx.font = (hexSize * 0.27) + 'px Cinzel,serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  ctx.fillText(c + ',' + r, x, y - hexSize * 0.54);
+
+  ctx.fillStyle = hex.terrain === 'unknown' ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.48)';
+  ctx.font = (hexSize * 0.52) + 'px serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(TICONS[hex.terrain] || '?', x, y + hexSize * 0.04);
+
+  if (hex.note && hex.note.trim()) {
+    ctx.beginPath(); ctx.arc(x + hexSize*0.5, y - hexSize*0.5, hexSize*0.12, 0, Math.PI*2);
+    ctx.fillStyle = '#e8c060'; ctx.fill();
+    ctx.strokeStyle = '#000'; ctx.lineWidth = 0.5; ctx.stroke();
+  }
+
+  if (hex.name && hex.name.trim()) {
+    ctx.fillStyle = hex.terrain === 'unknown' ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.58)';
+    ctx.font = 'italic ' + (hexSize * 0.26) + 'px Crimson Pro,serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillText(hex.name, x, y + hexSize * 0.84);
+  }
+
+  if (hex.explored) {
+    hexPath(); ctx.strokeStyle = 'rgba(240,192,64,0.28)'; ctx.lineWidth = 1.5; ctx.stroke();
+  }
+}
+
+function drawWorld() {
+  const canvas = _mapCanvas(); if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const { cols, rows } = state.mapMeta;
+  const CW = canvas.width, CH = canvas.height;
+  ctx.clearRect(0, 0, CW, CH);
+  const bg = ctx.createRadialGradient(CW/2, CH/2, 0, CW/2, CH/2, Math.max(CW, CH));
+  bg.addColorStop(0, '#1a1208'); bg.addColorStop(1, '#080502');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, CW, CH);
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) drawWorldHex(c, r);
+  updateMapStatus();
+}
+
+// ── Map — toolbar & mode ──────────────────────────────────────────────────────
+
+function _buildMapToolbar() {
+  const tb = document.getElementById('map-toolbar'); if (!tb) return;
+  const swatches = TORDER.map(t =>
+    `<button class="map-tbtn${_mapCurTerrain === t ? ' active' : ''}" data-terrain="${t}"
+        onclick="setMapTerrain('${t}')" title="${TNAMES[t]}">
+      <span class="map-tswatch" style="background:${TCOLORS[t]}"></span>${TNAMES[t]}
+    </button>`
+  ).join('');
+  const tools = [['paint','Paint'],['erase','Erase']].map(([m, l]) =>
+    `<button class="map-tool-btn${_mapCurMode === m ? ' active' : ''}" data-mode="${m}"
+        onclick="setMapMode('${m}')">${l}</button>`
+  ).join('');
+  tb.innerHTML = `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+    ${swatches}
+    <div style="width:1px;height:18px;background:var(--border);margin:0 2px;flex-shrink:0"></div>
+    ${tools}
+  </div>`;
+}
+
+function setMapTerrain(t) {
+  _mapCurTerrain = t;
+  document.querySelectorAll('.map-tbtn').forEach(b => b.classList.toggle('active', b.dataset.terrain === t));
+  updateMapStatus();
+}
+
+function setMapMode(mode) {
+  _mapCurMode = mode;
+  document.querySelectorAll('.map-tool-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  updateMapStatus();
+}
+
+function applyMapMode(c, r) {
+  const hex = getHex(c, r);
+  if      (_mapCurMode === 'paint') { hex.terrain = _mapCurTerrain; }
+  else if (_mapCurMode === 'erase') { hex.terrain = 'unknown'; hex.note = ''; hex.explored = false; hex.name = ''; }
+  save();
+  drawWorld();
+}
+
+function updateMapStatus() {
+  const sb = document.getElementById('map-statusbar'); if (!sb) return;
+  const hex = _mapHoverHex || _mapSelHex;
+  const coord = hex ? hex.col + ',' + hex.row : '—';
+  sb.textContent = 'MODE: ' + _mapCurMode.toUpperCase() +
+    ' | BRUSH: ' + (TNAMES[_mapCurTerrain] || _mapCurTerrain).toUpperCase() +
+    ' | HEX: ' + coord;
+}
+
+// ── Map — events ──────────────────────────────────────────────────────────────
+
+function _initMapEvents() {
+  _mapReady = true;
+  const canvas = _mapCanvas(); if (!canvas) return;
+  function cxy(e) {
+    const rect = canvas.getBoundingClientRect();
+    return { x: (e.clientX-rect.left)*(canvas.width/rect.width),
+             y: (e.clientY-rect.top) *(canvas.height/rect.height) };
+  }
+  canvas.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    _mapIsDrag = true;
+    const { x, y } = cxy(e);
+    const h = pxToHex(x, y);
+    if (h) { _mapSelHex = h; applyMapMode(h.col, h.row); }
+  });
+  canvas.addEventListener('mousemove', e => {
+    const { x, y } = cxy(e);
+    const h = pxToHex(x, y);
+    _mapHoverHex = h;
+    updateMapStatus();
+    if (_mapIsDrag && h) applyMapMode(h.col, h.row);
+  });
+  canvas.addEventListener('mouseup',    () => { _mapIsDrag = false; });
+  canvas.addEventListener('mouseleave', () => { _mapIsDrag = false; _mapHoverHex = null; updateMapStatus(); });
+}
+
+// ── Map — panel render ────────────────────────────────────────────────────────
 
 function renderMapPanel() {
   const { cols, rows, hexSize } = state.mapMeta;
-  const SQRT3 = Math.sqrt(3);
-  const HW    = SQRT3 * hexSize;
-  const VS    = hexSize * 1.5;
-  const PAD   = 10;
+  const HW = Math.sqrt(3) * hexSize, PAD = 10;
   const W = Math.ceil(cols * HW + HW / 2 + PAD * 2);
-  const H = Math.ceil(rows * VS + hexSize * 0.5 + PAD * 2);
-  const canvas = document.getElementById('map-canvas');
-  if (!canvas) return;
+  const H = Math.ceil(rows * hexSize * 1.5 + hexSize * 0.5 + PAD * 2);
+  const canvas = _mapCanvas(); if (!canvas) return;
   canvas.width  = W;
   canvas.height = H;
+  _buildMapToolbar();
+  if (!_mapReady) _initMapEvents();
+  drawWorld();
 }
 
 // ── Factions sub-tabs ─────────────────────────────────────────────────────────
