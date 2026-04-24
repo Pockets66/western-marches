@@ -532,10 +532,11 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
 .rumor-archive-btn.unarchive { border-color: var(--green); color: #7cbc80; }
 .rumor-archive-btn.unarchive:hover { background: rgba(42,106,48,0.12); }
 .rumor-new-card {
-  border: 2px dashed var(--border-lit); display: flex; align-items: center;
-  justify-content: center; min-height: 120px; cursor: pointer; transition: all 0.15s;
-  color: var(--text-muted); font-family: 'Cinzel', serif; font-size: 0.65rem;
-  letter-spacing: 0.12em; text-transform: uppercase;
+  border: 1px dashed var(--border); display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 8px;
+  min-height: 130px; cursor: pointer; transition: all 0.2s;
+  color: var(--text-muted); font-family: 'Cinzel', serif; font-size: 0.75rem;
+  letter-spacing: 0.15em; text-transform: uppercase;
 }
 .rumor-new-card:hover { border-color: var(--gold-dim); color: var(--gold-dim); background: rgba(200,151,42,0.04); }
 
@@ -1952,7 +1953,11 @@ function selectFaction(id) {
 
 function deleteFaction(id) {
   if (!confirm('Delete this faction? Its NPCs will become independent (not deleted).')) return;
-  state.npcs.forEach(n => { if (n.factionId === id) n.factionId = null; });
+  state.npcs.forEach(n    => { if (n.factionId === id) n.factionId = null; });
+  state.rumors.forEach(r  => { if (r.factionId === id) r.factionId = null; });
+  state.quests.forEach(q  => { if (q.factionId === id) q.factionId = null; });
+  state.pins.forEach(p    => { if (p.factionId === id) p.factionId = null; });
+  state.events.forEach(e  => { e.factionIds = (e.factionIds || []).filter(fid => fid !== id); });
   Object.keys(state.relations).forEach(key => {
     if (key.split('|').includes(id)) delete state.relations[key];
   });
@@ -2171,6 +2176,9 @@ function updateNpc(npcId, field, val) {
 }
 
 function removeNpc(npcId) {
+  state.rumors.forEach(r => { if (r.npcSourceId === npcId) r.npcSourceId = null; });
+  state.quests.forEach(q => { if (q.giverNpcId === npcId) q.giverNpcId = null; });
+  state.events.forEach(e => { e.npcIds = (e.npcIds || []).filter(nid => nid !== npcId); });
   state.npcs = state.npcs.filter(n => n.id !== npcId); save();
   const el = document.getElementById('f-npc-' + npcId); if (el) el.remove();
 }
