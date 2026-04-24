@@ -416,6 +416,32 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
 .btn-modal-cancel:hover { border-color: var(--text-dim); }
 .btn-modal-save { font-family: 'Cinzel', serif; font-size: 0.65rem; letter-spacing: 0.1em; text-transform: uppercase; padding: 6px 14px; background: var(--gold-dim); border: 1px solid var(--gold); color: var(--gold-pale); cursor: pointer; }
 .btn-modal-save:hover { background: var(--gold); color: #12100a; }
+.btn-modal-save:disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
+.ms-bounds-info {
+  font-family: 'Crimson Pro', Georgia, serif; font-size: 0.88rem; color: var(--text-dim);
+  background: rgba(0,0,0,0.2); padding: 8px 12px; line-height: 1.9;
+}
+.ms-bounds-info strong { color: var(--text); }
+.ms-dir-row { display: flex; align-items: center; gap: 8px; }
+.ms-dir-lbl {
+  font-family: 'Cinzel', serif; font-size: 0.6rem; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--text-dim); flex: 0 0 92px;
+}
+.ms-stepper { display: flex; align-items: center; gap: 3px; }
+.ms-step-btn {
+  width: 22px; height: 22px; background: transparent; border: 1px solid var(--border-lit);
+  color: var(--text-dim); font-size: 1rem; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.13s; flex-shrink: 0; line-height: 1;
+}
+.ms-step-btn:hover { border-color: var(--gold-dim); color: var(--gold); }
+.ms-step-inp {
+  width: 54px; background: rgba(0,0,0,0.2); border: 1px solid var(--border);
+  color: var(--text); font-family: 'Crimson Pro', Georgia, serif; font-size: 0.9rem;
+  padding: 3px 6px; outline: none; text-align: center;
+}
+.ms-step-inp:focus { border-color: var(--gold-dim); }
+.ms-dir-unit { font-family: 'Crimson Pro', serif; font-size: 0.82rem; color: var(--text-muted); font-style: italic; }
 
 /* ── Players panel ───────────────────────────────────────────────────────── */
 #panel-players { align-items: stretch; overflow: hidden;
@@ -752,26 +778,58 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
   </div>
 </div>
 
-<!-- Map settings modal -->
+<!-- Map resize modal -->
 <div class="modal-overlay hidden" id="map-settings-modal">
-  <div class="modal-box">
-    <div class="modal-title">Map Settings</div>
-    <div class="field-group">
-      <label class="field-label">Columns (5 – 60)</label>
-      <input type="number" class="field-input" id="ms-cols" min="5" max="60" oninput="_msInputChanged()">
+  <div class="modal-box" style="width:440px;max-width:96vw">
+    <div class="modal-title">Resize Map</div>
+    <div id="ms-bounds-info" class="ms-bounds-info"></div>
+    <div style="display:flex;flex-direction:column;gap:7px;margin-top:8px">
+      <div class="ms-dir-row">
+        <span class="ms-dir-lbl">Expand West</span>
+        <div class="ms-stepper">
+          <button class="ms-step-btn" onclick="_msStep('west',-1)">−</button>
+          <input class="ms-step-inp" type="number" id="ms-west"  value="0" oninput="_msValidate()">
+          <button class="ms-step-btn" onclick="_msStep('west',1)">+</button>
+        </div>
+        <span class="ms-dir-unit">hexes</span>
+      </div>
+      <div class="ms-dir-row">
+        <span class="ms-dir-lbl">Expand East</span>
+        <div class="ms-stepper">
+          <button class="ms-step-btn" onclick="_msStep('east',-1)">−</button>
+          <input class="ms-step-inp" type="number" id="ms-east"  value="0" oninput="_msValidate()">
+          <button class="ms-step-btn" onclick="_msStep('east',1)">+</button>
+        </div>
+        <span class="ms-dir-unit">hexes</span>
+      </div>
+      <div class="ms-dir-row">
+        <span class="ms-dir-lbl">Expand North</span>
+        <div class="ms-stepper">
+          <button class="ms-step-btn" onclick="_msStep('north',-1)">−</button>
+          <input class="ms-step-inp" type="number" id="ms-north" value="0" oninput="_msValidate()">
+          <button class="ms-step-btn" onclick="_msStep('north',1)">+</button>
+        </div>
+        <span class="ms-dir-unit">hexes</span>
+      </div>
+      <div class="ms-dir-row">
+        <span class="ms-dir-lbl">Expand South</span>
+        <div class="ms-stepper">
+          <button class="ms-step-btn" onclick="_msStep('south',-1)">−</button>
+          <input class="ms-step-inp" type="number" id="ms-south" value="0" oninput="_msValidate()">
+          <button class="ms-step-btn" onclick="_msStep('south',1)">+</button>
+        </div>
+        <span class="ms-dir-unit">hexes</span>
+      </div>
     </div>
-    <div class="field-group">
-      <label class="field-label">Rows (5 – 40)</label>
-      <input type="number" class="field-input" id="ms-rows" min="5" max="40" oninput="_msInputChanged()">
-    </div>
-    <div class="field-group">
+    <div class="field-group" style="margin-top:10px">
       <label class="field-label">Hex Size (16 – 64)</label>
-      <input type="number" class="field-input" id="ms-size" min="16" max="64" oninput="_msInputChanged()">
+      <input type="number" class="field-input" id="ms-size" min="16" max="64" style="width:80px" oninput="_msValidate()">
     </div>
-    <div id="ms-warning" class="hidden" style="font-family:'Crimson Pro',serif;font-size:0.88rem;color:var(--red);line-height:1.4"></div>
+    <div id="ms-error"   style="font-family:'Crimson Pro',serif;font-size:0.85rem;color:var(--red);min-height:1.1em"></div>
+    <div id="ms-warning" class="hidden" style="font-family:'Crimson Pro',serif;font-size:0.85rem;color:var(--gold-dim)"></div>
     <div class="modal-actions">
       <button class="btn-modal-cancel" onclick="closeMapSettings()">Cancel</button>
-      <button class="btn-modal-save" id="ms-create-btn" onclick="applyMapSettings()">Create</button>
+      <button class="btn-modal-save" id="ms-apply-btn" onclick="applyMapSettings()">Apply</button>
     </div>
   </div>
 </div>
@@ -1159,6 +1217,14 @@ function drawWorldHex(c, r) {
   if (hex.explored) {
     hexPath(); ctx.strokeStyle = 'rgba(240,192,64,0.28)'; ctx.lineWidth = 1.5; ctx.stroke();
   }
+
+  if (c === 0 && r === 0) {
+    ctx.beginPath();
+    ctx.arc(x, y, hexSize * 0.18, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(240,192,64,0.45)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
 }
 
 function drawWorld() {
@@ -1198,7 +1264,7 @@ function _buildMapToolbar() {
   const sep = `<div style="width:1px;height:18px;background:var(--border);margin:0 2px;flex-shrink:0"></div>`;
   tb.innerHTML = `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
     ${swatches}${sep}${tools}${sep}
-    <button class="map-action-btn" onclick="openMapSettings()">New Map</button>
+    <button class="map-action-btn" onclick="openMapSettings()">Resize Map</button>
     <button class="map-action-btn" onclick="exportMap()">Export</button>
     <button class="map-action-btn" onclick="importMap()">Import</button>
   </div>`;
@@ -1230,7 +1296,7 @@ function applyMapMode(c, r) {
 function updateMapStatus() {
   const sb = document.getElementById('map-statusbar'); if (!sb) return;
   const hex = _mapHoverHex || _mapSelHex;
-  const coord = hex ? hex.col + ',' + hex.row : '—';
+  const coord = hex ? hex.col + ', ' + hex.row : '—';
   sb.textContent = 'MODE: ' + _mapCurMode.toUpperCase() +
     ' | BRUSH: ' + (TNAMES[_mapCurTerrain] || _mapCurTerrain).toUpperCase() +
     ' | HEX: ' + coord;
@@ -1269,7 +1335,7 @@ function renderMapInfo(c, r) {
   const panel = document.getElementById('map-info-panel'); if (!panel) return;
   const hex = getHex(c, r);
   panel.innerHTML = `
-    <div class="map-info-coord">Hex ${c},${r}</div>
+    <div class="map-info-coord">Hex ${c}, ${r}${c === 0 && r === 0 ? ' <span style="font-size:0.65em;color:var(--gold-dim);letter-spacing:0.05em">— Origin</span>' : ''}</div>
     <div class="map-info-terrain">
       <div class="map-info-swatch" style="background:${TCOLORS[hex.terrain] || '#2a2218'}"></div>
       <span>${escHtml(TNAMES[hex.terrain] || 'Unknown')}</span>
@@ -1317,57 +1383,93 @@ function mapSaveNoteFlash() {
 // ── Map — settings modal ─────────────────────────────────────────────────────
 
 function openMapSettings() {
-  const { colMin, colMax, rowMin, rowMax, hexSize } = state.mapMeta;
-  document.getElementById('ms-cols').value = colMax - colMin + 1;
-  document.getElementById('ms-rows').value = rowMax - rowMin + 1;
-  document.getElementById('ms-size').value = hexSize;
-  _msInputChanged();
+  document.getElementById('ms-west').value  = 0;
+  document.getElementById('ms-east').value  = 0;
+  document.getElementById('ms-north').value = 0;
+  document.getElementById('ms-south').value = 0;
+  document.getElementById('ms-size').value  = state.mapMeta.hexSize;
+  _msValidate();
   document.getElementById('map-settings-modal').classList.remove('hidden');
 }
 
 function closeMapSettings() {
   document.getElementById('map-settings-modal').classList.add('hidden');
-  _msInputChanged();
 }
 
-function _msInputChanged() {
-  const w = document.getElementById('ms-warning'); if (!w) return;
-  w.classList.add('hidden');
-  delete w.dataset.pendingConfirm;
-  const btn = document.getElementById('ms-create-btn'); if (btn) btn.textContent = 'Create';
+function _msStep(dir, delta) {
+  const inp = document.getElementById('ms-' + dir);
+  inp.value = (parseInt(inp.value) || 0) + delta;
+  _msValidate();
+}
+
+function _msValidate() {
+  const { colMin, colMax, rowMin, rowMax } = state.mapMeta;
+  const west  = parseInt(document.getElementById('ms-west').value)  || 0;
+  const east  = parseInt(document.getElementById('ms-east').value)  || 0;
+  const north = parseInt(document.getElementById('ms-north').value) || 0;
+  const south = parseInt(document.getElementById('ms-south').value) || 0;
+  const nColMin = colMin - west, nColMax = colMax + east;
+  const nRowMin = rowMin - north, nRowMax = rowMax + south;
+  const nCols = nColMax - nColMin + 1, nRows = nRowMax - nRowMin + 1;
+  document.getElementById('ms-bounds-info').innerHTML =
+    `W <strong>${nColMin}</strong> · E <strong>${nColMax}</strong> · ` +
+    `N <strong>${nRowMin}</strong> · S <strong>${nRowMax}</strong>` +
+    ` &nbsp;·&nbsp; <strong>${nCols} × ${nRows}</strong> hexes`;
+  const applyBtn = document.getElementById('ms-apply-btn');
+  delete applyBtn.dataset.confirmed;
+  applyBtn.textContent = 'Apply';
+  const errEl = document.getElementById('ms-error');
+  if (nCols < 5 || nRows < 5) {
+    errEl.textContent = 'Map must be at least 5 × 5.';
+    applyBtn.disabled = true; return;
+  }
+  if (nCols > 120 || nRows > 80) {
+    errEl.textContent = `Map cannot exceed 120 × 80 (would be ${nCols} × ${nRows}).`;
+    applyBtn.disabled = true; return;
+  }
+  errEl.textContent = ''; applyBtn.disabled = false;
+  const paintedCount = Object.keys(state.hexes).filter(k => {
+    const [c, r] = k.split(',').map(Number);
+    return (c < nColMin || c > nColMax || r < nRowMin || r > nRowMax) &&
+           state.hexes[k].terrain !== 'unknown';
+  }).length;
+  const warnEl = document.getElementById('ms-warning');
+  if (paintedCount > 0) {
+    warnEl.textContent = `${paintedCount} painted hex${paintedCount !== 1 ? 'es' : ''} will be deleted.`;
+    warnEl.classList.remove('hidden');
+  } else {
+    warnEl.classList.add('hidden');
+  }
 }
 
 function applyMapSettings() {
-  const cols    = Math.max(5,  Math.min(120, parseInt(document.getElementById('ms-cols').value) || 22));
-  const rows    = Math.max(5,  Math.min(80,  parseInt(document.getElementById('ms-rows').value) || 16));
-  const hexSize = Math.max(16, Math.min(64,  parseInt(document.getElementById('ms-size').value) || 32));
-  // Convert total size to signed bounds centered on (0,0)
-  const hc = Math.floor(cols / 2), hr = Math.floor(rows / 2);
-  const newColMin = -(cols - hc), newColMax = hc - 1;
-  const newRowMin = -(rows - hr), newRowMax = hr - 1;
-  const outOfBounds = Object.keys(state.hexes).filter(k => {
-    const [c, r] = k.split(',').map(Number);
-    return c < newColMin || c > newColMax || r < newRowMin || r > newRowMax;
-  });
-  const warn = document.getElementById('ms-warning');
-  if (outOfBounds.length > 0 && !warn.dataset.pendingConfirm) {
-    warn.dataset.pendingConfirm = '1';
-    warn.textContent = `${outOfBounds.length} hex${outOfBounds.length !== 1 ? 'es' : ''} outside the new bounds will be deleted. Click Create again to confirm.`;
-    warn.classList.remove('hidden');
-    document.getElementById('ms-create-btn').textContent = 'Confirm & Create';
+  const { colMin, colMax, rowMin, rowMax } = state.mapMeta;
+  const west  = parseInt(document.getElementById('ms-west').value)  || 0;
+  const east  = parseInt(document.getElementById('ms-east').value)  || 0;
+  const north = parseInt(document.getElementById('ms-north').value) || 0;
+  const south = parseInt(document.getElementById('ms-south').value) || 0;
+  const hexSize = Math.max(16, Math.min(64, parseInt(document.getElementById('ms-size').value) || 32));
+  const nColMin = colMin - west, nColMax = colMax + east;
+  const nRowMin = rowMin - north, nRowMax = rowMax + south;
+  const warnEl = document.getElementById('ms-warning');
+  const applyBtn = document.getElementById('ms-apply-btn');
+  if (!warnEl.classList.contains('hidden') && !applyBtn.dataset.confirmed) {
+    applyBtn.dataset.confirmed = '1';
+    applyBtn.textContent = 'Confirm & Apply';
     return;
   }
-  state.mapMeta = { colMin: newColMin, colMax: newColMax, rowMin: newRowMin, rowMax: newRowMax, hexSize };
-  outOfBounds.forEach(k => delete state.hexes[k]);
-  if (_mapSelHex && (_mapSelHex.col < newColMin || _mapSelHex.col > newColMax ||
-                     _mapSelHex.row < newRowMin || _mapSelHex.row > newRowMax)) {
+  Object.keys(state.hexes).forEach(k => {
+    const [c, r] = k.split(',').map(Number);
+    if (c < nColMin || c > nColMax || r < nRowMin || r > nRowMax) delete state.hexes[k];
+  });
+  if (_mapSelHex && (_mapSelHex.col < nColMin || _mapSelHex.col > nColMax ||
+                     _mapSelHex.row < nRowMin || _mapSelHex.row > nRowMax)) {
     _mapSelHex = null;
     document.getElementById('map-info-panel').innerHTML =
       '<span style="color:var(--text-muted);font-style:italic;font-size:0.85rem">No hex selected.</span>';
   }
-  save();
-  closeMapSettings();
-  renderMapPanel();
+  state.mapMeta = { colMin: nColMin, colMax: nColMax, rowMin: nRowMin, rowMax: nRowMax, hexSize };
+  save(); closeMapSettings(); renderMapPanel();
 }
 
 // ── Map — export / import ─────────────────────────────────────────────────────
