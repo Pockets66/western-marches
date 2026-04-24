@@ -443,6 +443,15 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
 .ms-step-inp:focus { border-color: var(--gold-dim); }
 .ms-dir-unit { font-family: 'Crimson Pro', serif; font-size: 0.82rem; color: var(--text-muted); font-style: italic; }
 
+/* ── Rumors panel ────────────────────────────────────────────────────────── */
+#panel-rumors { flex-direction: column; align-items: stretch; overflow: hidden;
+  font-size: inherit; letter-spacing: normal; text-transform: none; color: var(--text); }
+.rumors-pane { flex: 1; overflow-y: auto; padding: 24px; min-height: 0; }
+.rumors-pane::-webkit-scrollbar { width: 8px; }
+.rumors-pane::-webkit-scrollbar-track { background: var(--panel-mid); }
+.rumors-pane::-webkit-scrollbar-thumb { background: var(--border-lit); }
+.rumors-pane::-webkit-scrollbar-thumb:hover { background: var(--gold-dim); }
+
 /* ── Players panel ───────────────────────────────────────────────────────── */
 #panel-players { align-items: stretch; overflow: hidden;
   font-size: inherit; letter-spacing: normal; text-transform: none; color: var(--text); }
@@ -681,9 +690,9 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
   <nav class="tab-bar">
     <button class="tab-btn" data-tab="map">Map</button>
     <button class="tab-btn" data-tab="factions">Factions</button>
-    <button class="tab-btn" data-tab="rumors">Rumors</button>
     <button class="tab-btn" data-tab="quests">Quests</button>
     <button class="tab-btn" data-tab="sessions">Sessions</button>
+    <button class="tab-btn" data-tab="rumors">Rumors</button>
     <button class="tab-btn" data-tab="players">Players</button>
   </nav>
 </header>
@@ -740,7 +749,26 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
     </div>
   </div>
 
-  <div class="panel" id="panel-rumors">[Rumors]</div>
+  <div class="panel" id="panel-rumors">
+    <div class="subtab-bar">
+      <button class="subtab-btn active" data-subtab="active"
+          onclick="switchRumorsSubtab('active')">Active</button>
+      <button class="subtab-btn" data-subtab="archived"
+          onclick="switchRumorsSubtab('archived')">Archived</button>
+    </div>
+    <div class="rumors-pane" id="rumors-active-pane">
+      <div class="empty-state">
+        <div class="glyph">✦</div>
+        <p>No rumors yet.</p>
+      </div>
+    </div>
+    <div class="rumors-pane hidden" id="rumors-archived-pane">
+      <div class="empty-state">
+        <div class="glyph">✦</div>
+        <p>No archived rumors.</p>
+      </div>
+    </div>
+  </div>
   <div class="panel" id="panel-quests">[Quests]</div>
 
   <div class="panel" id="panel-sessions">
@@ -880,7 +908,7 @@ function toast(msg) {
 const STORAGE_KEY = 'wm_unified_v1';
 
 let state = {
-  schemaVersion: 6,
+  schemaVersion: 7,
   factions:  [],
   npcs:      [],
   rumors:    [],
@@ -919,12 +947,13 @@ function load() {
   try {
     const parsed = JSON.parse(raw);
     const v = parsed.schemaVersion || 1;
-    if (v <= 6) {
+    if (v <= 7) {
       if (v < 2) migrateFactions(parsed);
       if (v < 3) migrateToV3(parsed);
       if (v < 4) migrateToV4(parsed);
       if (v < 5) migrateToV5(parsed);
       if (v < 6) migrateToV6(parsed);
+      if (v < 7) migrateToV7(parsed);
       state = parsed;
       if (state.ui && state.ui.activeTab === 'relations') state.ui.activeTab = 'factions';
       if (state.ui && !('activeSessionId' in state.ui)) state.ui.activeSessionId = null;
@@ -999,6 +1028,17 @@ function migrateToV6(parsed) {
   parsed.hexes = {};
   (parsed.players || []).forEach(p => { p.currentHexKey = null; });
   parsed.schemaVersion = 6;
+}
+
+function migrateToV7(parsed) {
+  const now = new Date().toISOString();
+  (parsed.rumors || []).forEach(r => {
+    if (!('archived'   in r)) r.archived   = false;
+    if (!('createdAt'  in r)) r.createdAt  = now;
+    if (!('archivedAt' in r)) r.archivedAt = null;
+    if (r.status === 'dangerous') r.status = 'unverified';
+  });
+  parsed.schemaVersion = 7;
 }
 
 function migrateFactions(parsed) {
@@ -1540,6 +1580,19 @@ function renderMapPanel() {
     _mapSelHex = { col: 0, row: 0 };
     renderMapInfo(0, 0);
   }
+}
+
+// ── Rumors sub-tabs ───────────────────────────────────────────────────────────
+
+let _rumorsSubtab = 'active';
+
+function switchRumorsSubtab(sub) {
+  _rumorsSubtab = sub;
+  document.querySelectorAll('#panel-rumors .subtab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.subtab === sub);
+  });
+  document.getElementById('rumors-active-pane').classList.toggle('hidden', sub !== 'active');
+  document.getElementById('rumors-archived-pane').classList.toggle('hidden', sub !== 'archived');
 }
 
 // ── Factions sub-tabs ─────────────────────────────────────────────────────────

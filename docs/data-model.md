@@ -34,12 +34,17 @@ v4 → v5:
 - Ensure `state.hexes` is an object (default `{}`).
 - Increment schemaVersion to 5.
 
-v5 → v6 (this update):
+v5 → v6:
 - Replace `mapMeta.cols/rows` with signed bounds: `{ colMin: -11, colMax: 10, rowMin: -8, rowMax: 7, hexSize }`.
   The hexSize from v5 is preserved; all other fields are fixed defaults.
 - Reset `state.hexes = {}` (existing hex data is incompatible with the new coordinate system).
 - Set `currentHexKey = null` on every player (old keys are meaningless after the wipe).
 - Increment schemaVersion to 6.
+
+v6 → v7 (this update):
+- For each rumor: add `archived: false`, `createdAt: <now>`, `archivedAt: null` if missing.
+- Fix any `status: "dangerous"` → `"unverified"` (cleanup from earlier planning).
+- Increment schemaVersion to 7.
 
 Incoming data from partner files (one-time import, not automatic):
 - `wm_sessions_v1` → read players into `state.players`, read sessions into
@@ -55,7 +60,7 @@ Import should be a deliberate user action, not automatic — see future slice.
 
 ```js
 state = {
-  schemaVersion: 6,
+  schemaVersion: 7,
   factions:    [Faction],
   npcs:        [NPC],
   rumors:      [Rumor],
@@ -211,6 +216,9 @@ Per-NPC interaction history is stored in `state.events`, filtered by `npcIds`.
   // Exactly one of these is set, or both are null:
   pinId:  string | null,        // tied to a specific location
   hexKey: string | null,        // tied to a hex but no specific pin
+  archived:   boolean,          // true = moved to archive tab
+  createdAt:  string,           // ISO timestamp
+  archivedAt: string | null,    // ISO timestamp when archived, else null
 }
 ```
 
