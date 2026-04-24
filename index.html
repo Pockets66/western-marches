@@ -2233,41 +2233,14 @@ function removeClock(fid, clockId) {
 
 // ── NPCs ──────────────────────────────────────────────────────────────────────
 
-function renderNpcCard(npc) {
-  return `<div class="npc-card" id="f-npc-${npc.id}">
-    <button class="npc-del-btn" onclick="removeNpc('${npc.id}')">✕</button>
-    <div class="npc-card-header">
-      <input class="npc-input" placeholder="Name" value="${escHtml(npc.name)}"
-        oninput="updateNpc('${npc.id}','name',this.value)">
-      <input class="npc-role-input" placeholder="Role" value="${escHtml(npc.role)}"
-        oninput="updateNpc('${npc.id}','role',this.value)">
-    </div>
-    <textarea class="npc-notes" placeholder="Description, secrets, quirks…"
-      oninput="updateNpc('${npc.id}','notes',this.value)">${escHtml(npc.notes)}</textarea>
-  </div>`;
-}
-
-function addNpc(fid) {
-  const npc = { id: uid(), name: '', role: '', notes: '', factionId: fid, pinId: null };
-  state.npcs.push(npc); save();
-  const container = document.getElementById('f-npc-list-' + fid); if (!container) return;
-  const el = document.createElement('div');
-  el.innerHTML = renderNpcCard(npc);
-  container.appendChild(el.firstElementChild);
-  container.querySelector('#f-npc-' + npc.id + ' .npc-input').focus();
-}
-
-function updateNpc(npcId, field, val) {
-  const npc = state.npcs.find(n => n.id === npcId); if (!npc) return;
-  npc[field] = val; save();
-}
-
-function removeNpc(npcId) {
-  state.rumors.forEach(r => { if (r.npcSourceId === npcId) r.npcSourceId = null; });
-  state.quests.forEach(q => { if (q.giverNpcId === npcId) q.giverNpcId = null; });
-  state.events.forEach(e => { e.npcIds = (e.npcIds || []).filter(nid => nid !== npcId); });
-  state.npcs = state.npcs.filter(n => n.id !== npcId); save();
-  const el = document.getElementById('f-npc-' + npcId); if (el) el.remove();
+function addNpcToFaction(fid) {
+  const n = {
+    id: uid(), name: '', role: '', notes: '',
+    factionId: fid, pinId: null,
+    disposition: 'unknown', description: '', secrets: '', playerKnown: false,
+  };
+  state.npcs.push(n); save();
+  goToTab('npcs', { activeNpcId: n.id });
 }
 
 // ── Faction Detail View ───────────────────────────────────────────────────────
@@ -2309,6 +2282,25 @@ function renderFactionDetail(f) {
   const clocksHtml = f.clocks.length
     ? f.clocks.map(clock => renderClockCard(f, clock)).join('')
     : '<p style="padding:12px 14px;color:var(--text-muted);font-style:italic;font-size:0.88rem">No clocks. Add one to track a faction agenda.</p>';
+
+  const fNpcs = state.npcs.filter(n => n.factionId === f.id);
+  const fNpcRows = fNpcs.length
+    ? fNpcs.map(n => {
+        const pipCol  = _NPC_DIP_COLORS[n.disposition];
+        const pip     = pipCol
+          ? `<div style="width:8px;height:8px;border-radius:50%;background:${pipCol};flex-shrink:0"></div>`
+          : `<div style="width:8px;height:8px;flex-shrink:0"></div>`;
+        const nmHtml  = n.name ? escHtml(n.name) : '<em style="color:var(--text-muted)">Unnamed</em>';
+        return `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border)">
+          ${pip}
+          <div style="flex:1;min-width:0">
+            <div style="font-size:0.88rem;color:var(--text)">${nmHtml}</div>
+            ${n.role ? `<div style="font-size:0.75rem;color:var(--text-muted)">${escHtml(n.role)}</div>` : ''}
+          </div>
+          <button class="btn-small" onclick="goToTab('npcs',{activeNpcId:'${n.id}'})">Edit →</button>
+        </div>`;
+      }).join('')
+    : '<p style="padding:12px;color:var(--text-muted);font-style:italic;font-size:0.88rem">No NPCs in this faction.</p>';
 
   detail.innerHTML = `<div class="faction-card">
     <div class="faction-card-header">
@@ -2370,12 +2362,10 @@ function renderFactionDetail(f) {
       </div>
 
       <div class="section-box section-full">
-        <div class="section-title">
-          Key NPCs
-          <button class="btn-small" onclick="addNpc('${f.id}')">+ Add NPC</button>
-        </div>
-        <div class="npc-cards" id="f-npc-list-${f.id}">
-          ${state.npcs.filter(n => n.factionId === f.id).map(n => renderNpcCard(n)).join('')}
+        <div class="section-title">Key NPCs</div>
+        ${fNpcRows}
+        <div style="padding:8px 12px;border-top:1px solid var(--border)">
+          <button class="btn-small" onclick="addNpcToFaction('${f.id}')">+ Add NPC to this Faction</button>
         </div>
       </div>
     </div>
