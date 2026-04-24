@@ -29,10 +29,17 @@ v3 → v4:
   `"relations"` is migrated to `"factions"` on load.
 - Increment schemaVersion to 4.
 
-v4 → v5 (this update):
+v4 → v5:
 - Add `state.mapMeta = { cols: 22, rows: 16, hexSize: 32 }` if missing.
 - Ensure `state.hexes` is an object (default `{}`).
 - Increment schemaVersion to 5.
+
+v5 → v6 (this update):
+- Replace `mapMeta.cols/rows` with signed bounds: `{ colMin: -11, colMax: 10, rowMin: -8, rowMax: 7, hexSize }`.
+  The hexSize from v5 is preserved; all other fields are fixed defaults.
+- Reset `state.hexes = {}` (existing hex data is incompatible with the new coordinate system).
+- Set `currentHexKey = null` on every player (old keys are meaningless after the wipe).
+- Increment schemaVersion to 6.
 
 Incoming data from partner files (one-time import, not automatic):
 - `wm_sessions_v1` → read players into `state.players`, read sessions into
@@ -48,7 +55,7 @@ Import should be a deliberate user action, not automatic — see future slice.
 
 ```js
 state = {
-  schemaVersion: 5,
+  schemaVersion: 6,
   factions:    [Faction],
   npcs:        [NPC],
   rumors:      [Rumor],
@@ -295,13 +302,20 @@ Grid configuration. Stored at `state.mapMeta` (not in any collection).
 
 ```js
 {
-  cols:    number,   // grid width in hexes (default 22, min 5, max 60)
-  rows:    number,   // grid height in hexes (default 16, min 5, max 40)
+  colMin:  number,   // inclusive signed integer (default -11)
+  colMax:  number,   // inclusive signed integer (default  10)
+  rowMin:  number,   // inclusive signed integer (default  -8)
+  rowMax:  number,   // inclusive signed integer (default   7)
   hexSize: number,   // hex circumradius in pixels (default 32, min 16, max 64)
 }
 ```
 
-Canvas pixel dimensions are derived from these values using pointy-top hex geometry:
+Hex `(0, 0)` is the world origin. Defaults give a 22×16 grid centered on `(0, 0)`.
+The map can be expanded asymmetrically in any direction.
+
+Canvas pixel dimensions are derived using pointy-top hex geometry:
+- `cols = colMax - colMin + 1`
+- `rows = rowMax - rowMin + 1`
 - `HW = sqrt(3) * hexSize`  (hex flat width)
 - `VS = hexSize * 1.5`      (vertical step)
 - `W  = ceil(cols * HW + HW/2 + PAD*2)`
@@ -309,7 +323,8 @@ Canvas pixel dimensions are derived from these values using pointy-top hex geome
 
 ### Hex
 
-Keyed by `"col,row"` in `state.hexes`.
+Keyed by `"col,row"` in `state.hexes`. Both `col` and `row` are signed integers,
+so keys like `"-5,3"` or `"0,-2"` are valid and expected.
 
 ```js
 {

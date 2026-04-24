@@ -822,7 +822,7 @@ function toast(msg) {
 const STORAGE_KEY = 'wm_unified_v1';
 
 let state = {
-  schemaVersion: 5,
+  schemaVersion: 6,
   factions:  [],
   npcs:      [],
   rumors:    [],
@@ -833,7 +833,7 @@ let state = {
   hexes:     {},
   pins:      [],
   relations: {},
-  mapMeta:   { cols: 22, rows: 16, hexSize: 32 },
+  mapMeta:   { colMin: -11, colMax: 10, rowMin: -8, rowMax: 7, hexSize: 32 },
   ui: {
     activeTab:       'map',
     activeFactionId: null,
@@ -861,11 +861,12 @@ function load() {
   try {
     const parsed = JSON.parse(raw);
     const v = parsed.schemaVersion || 1;
-    if (v <= 5) {
+    if (v <= 6) {
       if (v < 2) migrateFactions(parsed);
       if (v < 3) migrateToV3(parsed);
       if (v < 4) migrateToV4(parsed);
       if (v < 5) migrateToV5(parsed);
+      if (v < 6) migrateToV6(parsed);
       state = parsed;
       if (state.ui && state.ui.activeTab === 'relations') state.ui.activeTab = 'factions';
       if (state.ui && !('activeSessionId' in state.ui)) state.ui.activeSessionId = null;
@@ -928,6 +929,18 @@ function migrateToV5(parsed) {
   if (!parsed.mapMeta.hexSize) parsed.mapMeta.hexSize = 32;
   if (!parsed.hexes || typeof parsed.hexes !== 'object') parsed.hexes = {};
   parsed.schemaVersion = 5;
+}
+
+function migrateToV6(parsed) {
+  const old = parsed.mapMeta || {};
+  parsed.mapMeta = {
+    colMin: -11, colMax: 10,
+    rowMin: -8,  rowMax: 7,
+    hexSize: old.hexSize || 32,
+  };
+  parsed.hexes = {};
+  (parsed.players || []).forEach(p => { p.currentHexKey = null; });
+  parsed.schemaVersion = 6;
 }
 
 function migrateFactions(parsed) {
@@ -1018,9 +1031,12 @@ function _scheduleRedraw() {
 // ── Map — geometry ────────────────────────────────────────────────────────────
 
 function hexCenter(c, r) {
-  const { hexSize } = state.mapMeta;
+  const { colMin, rowMin, hexSize } = state.mapMeta;
   const HW = Math.sqrt(3) * hexSize;
-  return { x: 10 + c*HW + (r%2 ? HW*0.5 : 0) + HW*0.5, y: 10 + r*hexSize*1.5 + hexSize };
+  return {
+    x: 10 + (c - colMin)*HW + (r%2 ? HW*0.5 : 0) + HW*0.5,
+    y: 10 + (r - rowMin)*hexSize*1.5 + hexSize,
+  };
 }
 
 function hexCorner(cx, cy, i, s) {
@@ -1033,9 +1049,9 @@ function hexCorners(cx, cy, s) {
 }
 
 function pxToHex(px, py) {
-  const { cols, rows, hexSize } = state.mapMeta;
+  const { colMin, colMax, rowMin, rowMax, hexSize } = state.mapMeta;
   let b = null, bd = Infinity;
-  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+  for (let r = rowMin; r <= rowMax; r++) for (let c = colMin; c <= colMax; c++) {
     const { x, y } = hexCenter(c, r);
     const d = (px-x)**2 + (py-y)**2;
     if (d < bd) { bd = d; b = { col: c, row: r }; }
@@ -1155,13 +1171,13 @@ function drawWorld() {
   ctx.letterSpacing = '0px';
   ctx.globalAlpha   = 1;
   ctx.setLineDash([]);
-  const { cols, rows } = state.mapMeta;
+  const { colMin, colMax, rowMin, rowMax } = state.mapMeta;
   const CW = canvas.width, CH = canvas.height;
   ctx.clearRect(0, 0, CW, CH);
   const bg = ctx.createRadialGradient(CW/2, CH/2, 0, CW/2, CH/2, Math.max(CW, CH));
   bg.addColorStop(0, '#1a1208'); bg.addColorStop(1, '#080502');
   ctx.fillStyle = bg; ctx.fillRect(0, 0, CW, CH);
-  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) drawWorldHex(c, r);
+  for (let r = rowMin; r <= rowMax; r++) for (let c = colMin; c <= colMax; c++) drawWorldHex(c, r);
   updateMapStatus();
 }
 
@@ -1301,9 +1317,9 @@ function mapSaveNoteFlash() {
 // ── Map — settings modal ─────────────────────────────────────────────────────
 
 function openMapSettings() {
-  const { cols, rows, hexSize } = state.mapMeta;
-  document.getElementById('ms-cols').value = cols;
-  document.getElementById('ms-rows').value = rows;
+  const { colMin, colMax, rowMin, rowMax, hexSize } = state.mapMeta;
+  document.getElementById('ms-cols').value = colMax - colMin + 1;
+  document.getElementById('ms-rows').value = rowMax - rowMin + 1;
   document.getElementById('ms-size').value = hexSize;
   _msInputChanged();
   document.getElementById('map-settings-modal').classList.remove('hidden');
@@ -1322,12 +1338,16 @@ function _msInputChanged() {
 }
 
 function applyMapSettings() {
-  const cols    = Math.max(5,  Math.min(60, parseInt(document.getElementById('ms-cols').value) || 22));
-  const rows    = Math.max(5,  Math.min(40, parseInt(document.getElementById('ms-rows').value) || 16));
-  const hexSize = Math.max(16, Math.min(64, parseInt(document.getElementById('ms-size').value) || 32));
+  const cols    = Math.max(5,  Math.min(120, parseInt(document.getElementById('ms-cols').value) || 22));
+  const rows    = Math.max(5,  Math.min(80,  parseInt(document.getElementById('ms-rows').value) || 16));
+  const hexSize = Math.max(16, Math.min(64,  parseInt(document.getElementById('ms-size').value) || 32));
+  // Convert total size to signed bounds centered on (0,0)
+  const hc = Math.floor(cols / 2), hr = Math.floor(rows / 2);
+  const newColMin = -(cols - hc), newColMax = hc - 1;
+  const newRowMin = -(rows - hr), newRowMax = hr - 1;
   const outOfBounds = Object.keys(state.hexes).filter(k => {
     const [c, r] = k.split(',').map(Number);
-    return c >= cols || r >= rows;
+    return c < newColMin || c > newColMax || r < newRowMin || r > newRowMax;
   });
   const warn = document.getElementById('ms-warning');
   if (outOfBounds.length > 0 && !warn.dataset.pendingConfirm) {
@@ -1337,9 +1357,10 @@ function applyMapSettings() {
     document.getElementById('ms-create-btn').textContent = 'Confirm & Create';
     return;
   }
-  state.mapMeta = { cols, rows, hexSize };
+  state.mapMeta = { colMin: newColMin, colMax: newColMax, rowMin: newRowMin, rowMax: newRowMax, hexSize };
   outOfBounds.forEach(k => delete state.hexes[k]);
-  if (_mapSelHex && (_mapSelHex.col >= cols || _mapSelHex.row >= rows)) {
+  if (_mapSelHex && (_mapSelHex.col < newColMin || _mapSelHex.col > newColMax ||
+                     _mapSelHex.row < newRowMin || _mapSelHex.row > newRowMax)) {
     _mapSelHex = null;
     document.getElementById('map-info-panel').innerHTML =
       '<span style="color:var(--text-muted);font-style:italic;font-size:0.85rem">No hex selected.</span>';
@@ -1399,7 +1420,8 @@ function importMap() {
 // ── Map — panel render ────────────────────────────────────────────────────────
 
 function renderMapPanel() {
-  const { cols, rows, hexSize } = state.mapMeta;
+  const { colMin, colMax, rowMin, rowMax, hexSize } = state.mapMeta;
+  const cols = colMax - colMin + 1, rows = rowMax - rowMin + 1;
   const HW = Math.sqrt(3) * hexSize, PAD = 10;
   const W = Math.ceil(cols * HW + HW / 2 + PAD * 2);
   const H = Math.ceil(rows * hexSize * 1.5 + hexSize * 0.5 + PAD * 2);
@@ -1412,6 +1434,10 @@ function renderMapPanel() {
   _buildMapToolbar();
   if (!_mapReady) _initMapEvents();
   drawWorld();
+  if (!_mapSelHex && 0 >= colMin && 0 <= colMax && 0 >= rowMin && 0 <= rowMax) {
+    _mapSelHex = { col: 0, row: 0 };
+    renderMapInfo(0, 0);
+  }
 }
 
 // ── Factions sub-tabs ─────────────────────────────────────────────────────────
