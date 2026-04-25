@@ -580,6 +580,77 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
 }
 .npc-secrets-textarea::placeholder { color: var(--text-muted); font-style: italic; }
 
+/* ── Events panel ───────────────────────────────────────────────────────── */
+#panel-events { align-items: stretch; overflow: hidden;
+  font-size: inherit; letter-spacing: normal; text-transform: none; color: var(--text); }
+.e-filter-bar {
+  padding: 8px 10px; border-bottom: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 6px; flex-shrink: 0;
+}
+.e-search {
+  background: rgba(0,0,0,0.2); border: 1px solid var(--border); color: var(--text);
+  font-family: 'Crimson Pro', Georgia, serif; font-size: 0.85rem;
+  padding: 5px 8px; outline: none; width: 100%;
+}
+.e-search:focus { border-color: var(--gold-dim); }
+.e-search::placeholder { color: var(--text-muted); font-style: italic; }
+.e-known-btn {
+  font-family: 'Cinzel', serif; font-size: 0.56rem; letter-spacing: 0.08em;
+  text-transform: uppercase; padding: 4px 8px; border: 1px solid var(--border-lit);
+  background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.15s; text-align: left;
+}
+.e-known-btn:hover { color: var(--text); border-color: var(--gold-dim); }
+.e-known-btn.active { border-color: var(--gold); color: var(--gold-pale); background: rgba(200,151,42,0.1); }
+.e-list-row {
+  display: flex; align-items: flex-start; gap: 8px; padding: 9px 16px;
+  cursor: pointer; transition: background 0.15s; border-left: 3px solid transparent;
+}
+.e-list-row:hover { background: rgba(200,151,42,0.06); }
+.e-list-row.active { background: rgba(200,151,42,0.1); border-left-color: var(--gold); }
+.e-list-main { flex: 1; min-width: 0; }
+.e-list-date { font-size: 0.72rem; color: var(--text-muted); line-height: 1.3; }
+.e-list-text { font-size: 0.88rem; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.e-list-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex-shrink: 0; }
+.e-urgency-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+.e-urgency-row { display: flex; gap: 4px; flex-wrap: wrap; }
+.e-urgency-pill {
+  font-family: 'Cinzel', serif; font-size: 0.52rem; letter-spacing: 0.07em;
+  text-transform: uppercase; padding: 2px 7px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.15s;
+}
+.e-urgency-pill:hover { color: var(--text); }
+.e-urgency-pill.low.active      { border-color: var(--text-dim); color: var(--text-dim); }
+.e-urgency-pill.medium.active   { border-color: var(--gold-dim); color: var(--gold-dim); }
+.e-urgency-pill.high.active     { border-color: #c07820; color: #c07820; }
+.e-urgency-pill.critical.active { border-color: var(--red); color: #e06060; background: rgba(154,32,32,0.1); }
+.e-detail-header {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 16px 20px 12px; border-bottom: 1px solid var(--border);
+}
+.e-date-input {
+  background: rgba(0,0,0,0.2); border: 1px solid var(--border); color: var(--text);
+  font-family: 'Crimson Pro', Georgia, serif; font-size: 0.9rem;
+  padding: 4px 8px; outline: none; flex: 0 1 180px;
+}
+.e-date-input:focus { border-color: var(--gold-dim); }
+.e-date-input::placeholder { color: var(--text-muted); font-style: italic; }
+.e-textarea {
+  width: 100%; min-height: 120px; background: rgba(0,0,0,0.15); border: 1px solid var(--border);
+  color: var(--text); font-family: 'Crimson Pro', Georgia, serif; font-size: 0.9rem;
+  line-height: 1.55; padding: 7px 9px; outline: none; resize: vertical;
+}
+.e-textarea:focus { border-color: var(--gold-dim); }
+.e-textarea::placeholder { color: var(--text-muted); font-style: italic; }
+.e-player-btn {
+  font-family: 'Cinzel', serif; font-size: 0.52rem; letter-spacing: 0.07em;
+  text-transform: uppercase; padding: 3px 7px; border: 1px solid var(--border-lit);
+  background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.15s;
+}
+.e-player-btn:hover { color: var(--text); }
+.e-player-btn.on { border-color: var(--gold); color: var(--gold-pale); background: rgba(200,151,42,0.1); }
+.e-detail-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; max-width: 860px; }
+.e-links { }
+
 /* ── Players panel ───────────────────────────────────────────────────────── */
 #panel-players { align-items: stretch; overflow: hidden;
   font-size: inherit; letter-spacing: normal; text-transform: none; color: var(--text); }
@@ -820,6 +891,7 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
     <button class="tab-btn" data-tab="factions">Factions</button>
     <button class="tab-btn" data-tab="quests">Quests</button>
     <button class="tab-btn" data-tab="sessions">Sessions</button>
+    <button class="tab-btn" data-tab="events">Events</button>
     <button class="tab-btn" data-tab="rumors">Rumors</button>
     <button class="tab-btn" data-tab="npcs">NPCs</button>
     <button class="tab-btn" data-tab="players">Players</button>
@@ -941,6 +1013,41 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
         <p>No session selected.</p>
       </div>
       <div id="s-detail" class="hidden"></div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-events">
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <span>Events</span>
+        <button class="btn-small" onclick="newEvent()">+ New Event</button>
+      </div>
+      <div class="e-filter-bar">
+        <input class="e-search" type="text" id="event-search-inp"
+          placeholder="Search text or date…" oninput="_evtSearchChange(this.value)">
+        <select class="rumor-select" id="event-faction-sel"
+          onchange="_evtFactionChange(this.value)">
+          <option value="">All factions</option>
+        </select>
+        <select class="rumor-select" id="event-urgency-sel"
+          onchange="_evtUrgencyChange(this.value)">
+          <option value="">All urgencies</option>
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+          <option value="critical">Critical</option>
+        </select>
+        <button class="e-known-btn" id="event-known-btn"
+          onclick="_evtToggleKnown()">Player-known only</button>
+      </div>
+      <div class="sidebar-list" id="event-list"></div>
+    </div>
+    <div class="f-content">
+      <div class="empty-state" id="event-empty">
+        <div class="glyph">✦</div>
+        <p>Select an event or create one to begin.</p>
+      </div>
+      <div id="event-detail" class="hidden"></div>
     </div>
   </div>
 
@@ -1082,11 +1189,16 @@ let state = {
     activeQuestId:   null,
     activeSessionId: null,
     activePlayerId:  null,
-    activeNpcId:     null,
-    activeHexKey:    null,
-    rumorFilter:     '',
-    questFilter:     '',
-    sessionFilter:   '',
+    activeNpcId:          null,
+    activeHexKey:         null,
+    activeEventId:        null,
+    eventFilter:          '',
+    eventFactionFilter:   '',
+    eventUrgencyFilter:   '',
+    eventPlayerKnownOnly: false,
+    rumorFilter:          '',
+    questFilter:          '',
+    sessionFilter:        '',
   },
 };
 
@@ -1114,7 +1226,12 @@ function load() {
       if (v < 8) migrateToV8(parsed);
       state = parsed;
       if (state.ui && state.ui.activeTab === 'relations') state.ui.activeTab = 'factions';
-      if (state.ui && !('activeSessionId' in state.ui)) state.ui.activeSessionId = null;
+      if (state.ui && !('activeSessionId'        in state.ui)) state.ui.activeSessionId        = null;
+      if (state.ui && !('activeEventId'          in state.ui)) state.ui.activeEventId          = null;
+      if (state.ui && !('eventFilter'            in state.ui)) state.ui.eventFilter            = '';
+      if (state.ui && !('eventFactionFilter'     in state.ui)) state.ui.eventFactionFilter     = '';
+      if (state.ui && !('eventUrgencyFilter'     in state.ui)) state.ui.eventUrgencyFilter     = '';
+      if (state.ui && !('eventPlayerKnownOnly'   in state.ui)) state.ui.eventPlayerKnownOnly   = false;
       (state.sessions || []).forEach(s => {
         if (!('title'    in s)) s.title    = '';
         if (!('date'     in s)) s.date     = '';
@@ -1261,6 +1378,9 @@ function switchTab(tab) {
       if (n) selectNpc(n.id);
     }
   }
+  if (tab === 'events') {
+    renderEventsPanel();
+  }
   if (tab === 'players') {
     renderPlayerSidebar();
     if (state.ui.activePlayerId) {
@@ -1292,9 +1412,10 @@ const TICONS = {
 };
 const TORDER = ['plains','forest','dark-forest','hills','mountain','water','swamp','desert','ruins','settled','unknown'];
 
-let _mapCurTerrain = 'plains';
-let _mapCurMode    = 'select';
-let _mapIsDrag     = false;
+let _mapCurTerrain    = 'plains';
+let _mapCurMode       = 'select';
+let _mapIsDrag        = false;
+let _mapExploreIntent = true;
 let _mapSelHex     = null;
 let _mapHoverHex   = null;
 let _mapReady      = false;
@@ -1492,7 +1613,7 @@ function _buildMapToolbar() {
 function setMapTerrain(t) {
   _mapCurTerrain = t;
   document.querySelectorAll('.map-tbtn').forEach(b => b.classList.toggle('active', b.dataset.terrain === t));
-  updateMapStatus();
+  setMapMode('paint');
 }
 
 function setMapMode(mode) {
@@ -1505,7 +1626,7 @@ function applyMapMode(c, r) {
   const hex = getHex(c, r);
   if      (_mapCurMode === 'paint')    { hex.terrain = _mapCurTerrain; }
   else if (_mapCurMode === 'erase')    { hex.terrain = 'unknown'; hex.note = ''; hex.explored = false; hex.name = ''; }
-  else if (_mapCurMode === 'explored') { if (hex.terrain === 'unknown') return; hex.explored = !hex.explored; }
+  else if (_mapCurMode === 'explored') { if (hex.terrain === 'unknown') return; hex.explored = _mapExploreIntent; }
   else if (_mapCurMode === 'select')   { drawWorld(); renderMapInfo(c, r); return; }
   save();
   _scheduleRedraw();
@@ -1535,7 +1656,14 @@ function _initMapEvents() {
     _mapIsDrag = true;
     const { x, y } = cxy(e);
     const h = pxToHex(x, y);
-    if (h) { _mapSelHex = h; applyMapMode(h.col, h.row); }
+    if (h) {
+      if (_mapCurMode === 'explored') {
+        const hex = getHex(h.col, h.row);
+        _mapExploreIntent = !hex.explored;
+      }
+      _mapSelHex = h;
+      applyMapMode(h.col, h.row);
+    }
   });
   canvas.addEventListener('mousemove', e => {
     const { x, y } = cxy(e);
@@ -3434,6 +3562,209 @@ function saveRelNoteModal() {
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { closeRelNoteModal(); closeRelConfirmModal(); }
 });
+
+// ── Events ────────────────────────────────────────────────────────────────────
+
+const E_URGENCY_COLORS = {
+  low: 'var(--text-dim)', medium: 'var(--gold-dim)', high: '#c07820', critical: 'var(--red)',
+};
+
+function newEvent() {
+  const e = {
+    id: uid(), date: '', text: '', urgency: 'low', playerKnown: false,
+    factionIds: [], npcIds: [], pinIds: [], hexKeys: [],
+    questId: null, sessionId: null,
+  };
+  state.events.unshift(e);
+  state.ui.activeEventId = e.id;
+  save();
+  renderEventsPanel();
+}
+
+function selectEvent(id) {
+  state.ui.activeEventId = id;
+  save();
+  renderEventList();
+  renderEventDetail();
+}
+
+function deleteEvent(id) {
+  if (!confirm('Delete this event? This cannot be undone.')) return;
+  state.events = state.events.filter(e => e.id !== id);
+  if (state.ui.activeEventId === id) state.ui.activeEventId = null;
+  save();
+  renderEventsPanel();
+}
+
+function updateEventField(id, field, val) {
+  const e = state.events.find(e => e.id === id); if (!e) return;
+  e[field] = val;
+  save();
+  renderEventList();
+}
+
+function setEventUrgency(id, urgency) {
+  const e = state.events.find(e => e.id === id); if (!e) return;
+  e.urgency = urgency;
+  save();
+  renderEventList();
+  // Update urgency pills in-place without re-rendering the whole detail
+  document.querySelectorAll('#event-detail .e-urgency-pill').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.urgency === urgency);
+  });
+  const dot = document.getElementById('e-dot-' + id);
+  if (dot) dot.style.background = E_URGENCY_COLORS[urgency] || 'var(--text-dim)';
+}
+
+function toggleEventKnown(id) {
+  const e = state.events.find(e => e.id === id); if (!e) return;
+  e.playerKnown = !e.playerKnown;
+  save();
+  renderEventList();
+  const btn = document.getElementById('e-known-btn-' + id);
+  if (btn) btn.classList.toggle('on', e.playerKnown);
+}
+
+function renderEventsPanel() {
+  // Rebuild faction select options
+  const fsel = document.getElementById('event-faction-sel');
+  if (fsel) {
+    const cur = state.ui.eventFactionFilter;
+    fsel.innerHTML = '<option value="">All factions</option>' +
+      state.factions.map(f =>
+        `<option value="${f.id}"${f.id === cur ? ' selected' : ''}>${escHtml(f.name)}</option>`
+      ).join('');
+    fsel.value = cur;
+  }
+  // Restore urgency select
+  const usel = document.getElementById('event-urgency-sel');
+  if (usel) usel.value = state.ui.eventUrgencyFilter;
+  // Restore search
+  const sinp = document.getElementById('event-search-inp');
+  if (sinp && document.activeElement !== sinp) sinp.value = state.ui.eventFilter;
+  // Restore known-btn state
+  const kbtn = document.getElementById('event-known-btn');
+  if (kbtn) kbtn.classList.toggle('active', state.ui.eventPlayerKnownOnly);
+  renderEventList();
+  renderEventDetail();
+}
+
+function renderEventList() {
+  const list = document.getElementById('event-list'); if (!list) return;
+  // Insertion order — newest first since newEvent() prepends
+  let evts = state.events.slice();
+  const q = (state.ui.eventFilter || '').toLowerCase().trim();
+  if (q) {
+    evts = evts.filter(e =>
+      (e.text || '').toLowerCase().includes(q) ||
+      (e.date || '').toLowerCase().includes(q)
+    );
+  }
+  if (state.ui.eventFactionFilter) {
+    evts = evts.filter(e => (e.factionIds || []).includes(state.ui.eventFactionFilter));
+  }
+  if (state.ui.eventUrgencyFilter) {
+    evts = evts.filter(e => e.urgency === state.ui.eventUrgencyFilter);
+  }
+  if (state.ui.eventPlayerKnownOnly) {
+    evts = evts.filter(e => e.playerKnown);
+  }
+  if (!evts.length) {
+    list.innerHTML = '<div style="padding:16px;color:var(--text-muted);font-size:0.85rem;font-style:italic;text-align:center">No events match these filters.</div>';
+    return;
+  }
+  list.innerHTML = evts.map(e => {
+    const dotColor = E_URGENCY_COLORS[e.urgency] || 'var(--text-dim)';
+    const dateHtml = e.date ? `<div class="e-list-date">${escHtml(e.date)}</div>` : '';
+    const preview  = e.text
+      ? escHtml(e.text.slice(0, 60)) + (e.text.length > 60 ? '…' : '')
+      : '<em style="color:var(--text-muted)">(no description)</em>';
+    // Faction color dots (up to 3)
+    const fDots = (e.factionIds || []).slice(0, 3).map(fid => {
+      const f = state.factions.find(f => f.id === fid);
+      return f ? `<div class="faction-dot" style="background:${f.color}"></div>` : '';
+    }).join('');
+    const lockGlyph = !e.playerKnown
+      ? `<span style="font-size:0.7rem;color:var(--text-muted)" title="Hidden from players">🔒</span>` : '';
+    return `<div class="e-list-row${e.id === state.ui.activeEventId ? ' active' : ''}"
+        onclick="selectEvent('${e.id}')">
+      <div class="e-list-main">
+        ${dateHtml}
+        <div class="e-list-text">${preview}</div>
+      </div>
+      <div class="e-list-meta">
+        <div class="e-urgency-dot" style="background:${dotColor}"></div>
+        <div style="display:flex;gap:3px;align-items:center">${fDots}${lockGlyph}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderEventDetail() {
+  const empty  = document.getElementById('event-empty');
+  const detail = document.getElementById('event-detail');
+  if (!detail) return;
+  const e = state.events.find(e => e.id === state.ui.activeEventId);
+  if (!e) {
+    if (empty) empty.classList.remove('hidden');
+    detail.classList.add('hidden');
+    detail.innerHTML = '';
+    return;
+  }
+  if (empty) empty.classList.add('hidden');
+  detail.classList.remove('hidden');
+
+  const urgencyPills = ['low','medium','high','critical'].map(u =>
+    `<button class="e-urgency-pill ${u}${e.urgency === u ? ' active' : ''}"
+      data-urgency="${u}" onclick="setEventUrgency('${e.id}','${u}')">${u.charAt(0).toUpperCase()+u.slice(1)}</button>`
+  ).join('');
+
+  detail.innerHTML = `
+    <div class="e-detail-header">
+      <input class="e-date-input" id="e-date-${e.id}" placeholder="Date or session…"
+        value="${escHtml(e.date)}"
+        oninput="updateEventField('${e.id}','date',this.value)">
+      <div class="e-urgency-row">${urgencyPills}</div>
+      <button class="e-player-btn${e.playerKnown ? ' on' : ''}" id="e-known-btn-${e.id}"
+        onclick="toggleEventKnown('${e.id}')">${e.playerKnown ? 'Player-known' : 'Hidden'}</button>
+      <span id="e-dot-${e.id}" class="e-urgency-dot" style="background:${E_URGENCY_COLORS[e.urgency]||'var(--text-dim)'}"></span>
+      <button class="btn-danger" style="margin-left:auto"
+        onclick="deleteEvent('${e.id}')">Delete</button>
+    </div>
+    <div class="e-detail-body">
+      <textarea class="e-textarea" id="e-text-${e.id}"
+        placeholder="Describe the event…"
+        oninput="updateEventField('${e.id}','text',this.value)">${escHtml(e.text)}</textarea>
+      <!-- Stage 3: link editing goes here -->
+      <div class="e-links"></div>
+    </div>`;
+}
+
+function _evtSearchChange(val) {
+  state.ui.eventFilter = val;
+  save();
+  renderEventList();
+}
+
+function _evtFactionChange(val) {
+  state.ui.eventFactionFilter = val;
+  save();
+  renderEventList();
+}
+
+function _evtUrgencyChange(val) {
+  state.ui.eventUrgencyFilter = val;
+  save();
+  renderEventList();
+}
+
+function _evtToggleKnown() {
+  state.ui.eventPlayerKnownOnly = !state.ui.eventPlayerKnownOnly;
+  save();
+  const btn = document.getElementById('event-known-btn');
+  if (btn) btn.classList.toggle('active', state.ui.eventPlayerKnownOnly);
+  renderEventList();
+}
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
