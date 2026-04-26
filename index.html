@@ -650,6 +650,28 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
 .e-player-btn.on { border-color: var(--gold); color: var(--gold-pale); background: rgba(200,151,42,0.1); }
 .e-detail-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; max-width: 860px; }
 .e-links { }
+.e-clocks-row { display: flex; gap: 16px; flex-wrap: wrap; }
+.e-clock-slot {
+  flex: 1; min-width: 160px; border: 1px solid var(--border); background: var(--panel-mid);
+  padding: 10px 12px; display: flex; flex-direction: column; align-items: center; gap: 8px; position: relative;
+}
+.e-clock-slot-label {
+  font-family: 'Cinzel', serif; font-size: 0.58rem; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--text-muted); align-self: flex-start;
+}
+.e-clock-add-btn {
+  font-family: 'Cinzel', serif; font-size: 0.62rem; letter-spacing: 0.1em;
+  text-transform: uppercase; padding: 6px 14px; border: 1px dashed var(--border-lit);
+  background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.2s;
+  margin: 12px 0;
+}
+.e-clock-add-btn:hover { border-color: var(--gold-dim); color: var(--gold-dim); }
+.e-clock-remove-btn {
+  position: absolute; top: 6px; right: 6px;
+  background: transparent; border: none; color: var(--text-muted);
+  cursor: pointer; font-size: 0.8rem; line-height: 1; transition: color 0.15s;
+}
+.e-clock-remove-btn:hover { color: var(--red); }
 
 /* ── Players panel ───────────────────────────────────────────────────────── */
 #panel-players { align-items: stretch; overflow: hidden;
@@ -1171,7 +1193,7 @@ function toast(msg) {
 const STORAGE_KEY = 'wm_unified_v1';
 
 let state = {
-  schemaVersion: 8,
+  schemaVersion: 9,
   factions:  [],
   npcs:      [],
   rumors:    [],
@@ -1216,7 +1238,7 @@ function load() {
   try {
     const parsed = JSON.parse(raw);
     const v = parsed.schemaVersion || 1;
-    if (v <= 8) {
+    if (v <= 9) {
       if (v < 2) migrateFactions(parsed);
       if (v < 3) migrateToV3(parsed);
       if (v < 4) migrateToV4(parsed);
@@ -1224,6 +1246,7 @@ function load() {
       if (v < 6) migrateToV6(parsed);
       if (v < 7) migrateToV7(parsed);
       if (v < 8) migrateToV8(parsed);
+      if (v < 9) migrateToV9(parsed);
       state = parsed;
       if (state.ui && state.ui.activeTab === 'relations') state.ui.activeTab = 'factions';
       if (state.ui && !('activeSessionId'        in state.ui)) state.ui.activeSessionId        = null;
@@ -1324,6 +1347,15 @@ function migrateToV8(parsed) {
     if (!('playerKnown' in n)) n.playerKnown  = false;
   });
   parsed.schemaVersion = 8;
+}
+
+function migrateToV9(parsed) {
+  parsed.events = parsed.events || [];
+  parsed.events.forEach(e => {
+    if (!('timeUntilClock' in e)) e.timeUntilClock = null;
+    if (!('durationClock'  in e)) e.durationClock  = null;
+  });
+  parsed.schemaVersion = 9;
 }
 
 function migrateFactions(parsed) {
@@ -2238,7 +2270,7 @@ function toggleFactionKnown(id) {
 
 // ── Clock ─────────────────────────────────────────────────────────────────────
 
-function renderClockSVG(clock, color, clockId) {
+function renderClockSVG(clock, color, onSegClickAttr) {
   const sz = clock.size || 6;
   const fill = Math.max(0, Math.min(clock.filled || 0, sz));
   const cx = 54, cy = 54, r = 44;
@@ -2251,7 +2283,8 @@ function renderClockSVG(clock, color, clockId) {
     const lg = (1 / sz) > 0.5 ? 1 : 0;
     const fc = i < fill ? color : '#1a1408';
     const sc = i < fill ? color : '#4a3820';
-    segs.push(`<path d="M${cx},${cy} L${x1.toFixed(2)},${y1.toFixed(2)} A${r},${r} 0 ${lg},1 ${x2.toFixed(2)},${y2.toFixed(2)} Z" fill="${fc}" stroke="${sc}" stroke-width="2" style="cursor:pointer" onmouseenter="this.style.filter='brightness(1.35)'" onmouseleave="this.style.filter=''" onclick="stepClockSeg('${clockId}',${i})"/>`);
+    const clickCb = onSegClickAttr.replace('{i}', i);
+    segs.push(`<path d="M${cx},${cy} L${x1.toFixed(2)},${y1.toFixed(2)} A${r},${r} 0 ${lg},1 ${x2.toFixed(2)},${y2.toFixed(2)} Z" fill="${fc}" stroke="${sc}" stroke-width="2" style="cursor:pointer" onmouseenter="this.style.filter='brightness(1.35)'" onmouseleave="this.style.filter=''" onclick="${clickCb}"/>`);
   }
   const pct = sz > 0 ? fill / sz : 0;
   const tc = pct >= 0.75 ? '#ff6060' : pct >= 0.5 ? '#c8a030' : '#a09070';
@@ -2268,7 +2301,7 @@ function updateClockDisplay(fid, clockId) {
   const clock = f.clocks.find(c => c.id === clockId); if (!clock) return;
   const wrap  = document.getElementById('f-clock-svg-'   + clockId);
   const count = document.getElementById('f-clock-count-' + clockId);
-  if (wrap)  wrap.innerHTML = renderClockSVG(clock, f.color, clockId);
+  if (wrap)  wrap.innerHTML = renderClockSVG(clock, f.color, "stepClockSeg('" + clockId + "',{i})");
   if (count) count.textContent = clock.filled + '/' + clock.size;
 }
 
@@ -2317,7 +2350,7 @@ function renderClockCard(f, clock) {
     <button class="npc-del-btn" onclick="removeClock('${f.id}','${clock.id}')">✕</button>
     <div class="clock-section">
       <div class="clock-row">
-        <div class="clock-svg-wrap" id="f-clock-svg-${clock.id}">${renderClockSVG(clock, f.color, clock.id)}</div>
+        <div class="clock-svg-wrap" id="f-clock-svg-${clock.id}">${renderClockSVG(clock, f.color, "stepClockSeg('" + clock.id + "',{i})")}</div>
         <div style="flex:1;min-width:200px">
           <input class="clock-label-input" placeholder="What is this clock counting toward?…"
             value="${escHtml(clock.label)}" oninput="updateClockField('${f.id}','${clock.id}','label',this.value)">
@@ -3574,6 +3607,7 @@ function newEvent() {
     id: uid(), date: '', text: '', urgency: 'low', playerKnown: false,
     factionIds: [], npcIds: [], pinIds: [], hexKeys: [],
     questId: null, sessionId: null,
+    timeUntilClock: null, durationClock: null,
   };
   state.events.unshift(e);
   state.ui.activeEventId = e.id;
@@ -3686,6 +3720,13 @@ function renderEventList() {
     }).join('');
     const lockGlyph = !e.playerKnown
       ? `<span style="font-size:0.7rem;color:var(--text-muted)" title="Hidden from players">🔒</span>` : '';
+    let clockTip = '';
+    if (e.timeUntilClock || e.durationClock) {
+      const parts = [];
+      if (e.timeUntilClock) parts.push('Time until: ' + e.timeUntilClock.filled + '/' + e.timeUntilClock.size);
+      if (e.durationClock)  parts.push('Duration: '   + e.durationClock.filled  + '/' + e.durationClock.size);
+      clockTip = `<span style="font-size:0.75rem;color:var(--text-dim)" title="${parts.join(' · ')}">⏰</span>`;
+    }
     return `<div class="e-list-row${e.id === state.ui.activeEventId ? ' active' : ''}"
         onclick="selectEvent('${e.id}')">
       <div class="e-list-main">
@@ -3694,7 +3735,7 @@ function renderEventList() {
       </div>
       <div class="e-list-meta">
         <div class="e-urgency-dot" style="background:${dotColor}"></div>
-        <div style="display:flex;gap:3px;align-items:center">${fDots}${lockGlyph}</div>
+        <div style="display:flex;gap:3px;align-items:center">${clockTip}${fDots}${lockGlyph}</div>
       </div>
     </div>`;
   }).join('');
@@ -3735,9 +3776,83 @@ function renderEventDetail() {
       <textarea class="e-textarea" id="e-text-${e.id}"
         placeholder="Describe the event…"
         oninput="updateEventField('${e.id}','text',this.value)">${escHtml(e.text)}</textarea>
+      <div class="e-clocks-row">
+        ${_renderEventClockSlot(e, 'timeUntil')}
+        ${_renderEventClockSlot(e, 'duration')}
+      </div>
       <!-- Stage 3: link editing goes here -->
       <div class="e-links"></div>
     </div>`;
+}
+
+function _slotField(slot) {
+  return slot === 'timeUntil' ? 'timeUntilClock' : 'durationClock';
+}
+
+function addEventClock(eventId, slot) {
+  const e = state.events.find(e => e.id === eventId); if (!e) return;
+  e[_slotField(slot)] = { size: 6, filled: 0 };
+  save();
+  _updateEventClockSlot(eventId, slot);
+  renderEventList();
+}
+
+function removeEventClock(eventId, slot) {
+  const e = state.events.find(e => e.id === eventId); if (!e) return;
+  e[_slotField(slot)] = null;
+  save();
+  _updateEventClockSlot(eventId, slot);
+  renderEventList();
+}
+
+function stepEventClockSeg(eventId, slot, segIdx) {
+  const e = state.events.find(e => e.id === eventId); if (!e) return;
+  const clk = e[_slotField(slot)]; if (!clk) return;
+  clk.filled = segIdx < clk.filled ? segIdx : segIdx + 1;
+  clk.filled = Math.max(0, Math.min(clk.filled, clk.size));
+  save();
+  _updateEventClockSlot(eventId, slot);
+}
+
+function setEventClockSize(eventId, slot, size, btn) {
+  const e = state.events.find(e => e.id === eventId); if (!e) return;
+  const clk = e[_slotField(slot)]; if (!clk) return;
+  clk.size = size;
+  clk.filled = Math.min(clk.filled, size);
+  save();
+  btn.closest('.clock-size-row').querySelectorAll('.clock-size-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  _updateEventClockSlot(eventId, slot);
+}
+
+function _renderEventClockSlot(e, slot) {
+  const label    = slot === 'timeUntil' ? 'Time Until' : 'Duration';
+  const color    = slot === 'timeUntil' ? '#c8a030' : '#a09070';
+  const field    = _slotField(slot);
+  const clk      = e[field];
+  if (!clk) {
+    return `<div class="e-clock-slot" id="e-clock-slot-${e.id}-${slot}">
+      <div class="e-clock-slot-label">${label}</div>
+      <button class="e-clock-add-btn" onclick="addEventClock('${e.id}','${slot}')">+ Add</button>
+    </div>`;
+  }
+  const szbtns = CLOCK_SIZES.map(s =>
+    `<button class="clock-size-btn ${clk.size === s ? 'active' : ''}"
+      onclick="setEventClockSize('${e.id}','${slot}',${s},this)">${s}</button>`
+  ).join('');
+  const svg = renderClockSVG(clk, color, "stepEventClockSeg('" + e.id + "','" + slot + "',{i})");
+  return `<div class="e-clock-slot" id="e-clock-slot-${e.id}-${slot}">
+    <div class="e-clock-slot-label">${label}</div>
+    <button class="e-clock-remove-btn" onclick="removeEventClock('${e.id}','${slot}')" title="Remove clock">✕</button>
+    ${svg}
+    <div class="clock-size-row"><span class="clock-size-label">Segments</span>${szbtns}</div>
+  </div>`;
+}
+
+function _updateEventClockSlot(eventId, slot) {
+  const e = state.events.find(e => e.id === eventId); if (!e) return;
+  const wrap = document.getElementById('e-clock-slot-' + eventId + '-' + slot);
+  if (wrap) wrap.outerHTML = _renderEventClockSlot(e, slot);
 }
 
 function _evtSearchChange(val) {
