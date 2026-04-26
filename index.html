@@ -649,7 +649,45 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
 .e-player-btn:hover { color: var(--text); }
 .e-player-btn.on { border-color: var(--gold); color: var(--gold-pale); background: rgba(200,151,42,0.1); }
 .e-detail-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; max-width: 860px; }
-.e-links { }
+.e-links { display: flex; flex-direction: column; border: 1px solid var(--border); }
+.e-link-row {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 7px 10px; border-bottom: 1px solid var(--border);
+}
+.e-link-row:last-child { border-bottom: none; }
+.e-link-label {
+  font-family: 'Cinzel', serif; font-size: 0.56rem; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--text-muted); min-width: 54px;
+  flex-shrink: 0; padding-top: 5px;
+}
+.e-chips-wrap { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; flex: 1; }
+.e-chip {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 2px 5px 2px 7px; background: rgba(0,0,0,0.2);
+  border: 1px solid var(--border-lit); font-size: 0.82rem; color: var(--text);
+}
+.e-chip-remove {
+  background: transparent; border: none; color: var(--text-muted);
+  cursor: pointer; font-size: 0.9rem; line-height: 1; padding: 0 1px; transition: color 0.15s;
+}
+.e-chip-remove:hover { color: var(--red); }
+.e-chip-add-btn {
+  font-family: 'Cinzel', serif; font-size: 0.54rem; letter-spacing: 0.08em;
+  text-transform: uppercase; padding: 3px 7px; border: 1px dashed var(--border-lit);
+  background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.15s;
+}
+.e-chip-add-btn:hover { border-color: var(--gold-dim); color: var(--gold-dim); }
+.e-chip-add-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.e-chip-picker {
+  background: rgba(0,0,0,0.25); border: 1px solid var(--gold-dim); color: var(--text);
+  font-family: 'Crimson Pro', Georgia, serif; font-size: 0.82rem;
+  padding: 3px 6px; outline: none; cursor: pointer;
+}
+.e-link-select { flex: 1; }
+.e-list-badges {
+  font-family: 'Cinzel', serif; font-size: 0.54rem; letter-spacing: 0.06em;
+  color: var(--text-muted); margin-top: 2px;
+}
 .e-clocks-row { display: flex; gap: 16px; flex-wrap: wrap; }
 .e-clock-slot {
   flex: 1; min-width: 160px; border: 1px solid var(--border); background: var(--panel-mid);
@@ -3727,11 +3765,29 @@ function renderEventList() {
       if (e.durationClock)  parts.push('Duration: '   + e.durationClock.filled  + '/' + e.durationClock.size);
       clockTip = `<span style="font-size:0.75rem;color:var(--text-dim)" title="${parts.join(' · ')}">⏰</span>`;
     }
+    // Link count badges
+    const fC = (e.factionIds || []).length, nC = (e.npcIds || []).length;
+    const pC = (e.pinIds || []).length,     hC = (e.hexKeys || []).length;
+    const badgeParts = [];
+    if (fC) badgeParts.push(fC + 'F');
+    if (nC) badgeParts.push(nC + 'N');
+    if (pC) badgeParts.push(pC + 'P');
+    if (hC) badgeParts.push(hC + 'H');
+    if (e.questId) {
+      const q = state.quests.find(q => q.id === e.questId);
+      badgeParts.push(`<span title="${escHtml(q ? (q.title || 'Quest') : 'Quest')}">Q</span>`);
+    }
+    if (e.sessionId) {
+      const s = state.sessions.find(s => s.id === e.sessionId);
+      badgeParts.push(`<span title="${escHtml(s ? (s.title || 'Session') : 'Session')}">S</span>`);
+    }
+    const badgesHtml = badgeParts.length ? `<div class="e-list-badges">${badgeParts.join(' · ')}</div>` : '';
     return `<div class="e-list-row${e.id === state.ui.activeEventId ? ' active' : ''}"
         onclick="selectEvent('${e.id}')">
       <div class="e-list-main">
         ${dateHtml}
         <div class="e-list-text">${preview}</div>
+        ${badgesHtml}
       </div>
       <div class="e-list-meta">
         <div class="e-urgency-dot" style="background:${dotColor}"></div>
@@ -3780,8 +3836,7 @@ function renderEventDetail() {
         ${_renderEventClockSlot(e, 'timeUntil')}
         ${_renderEventClockSlot(e, 'duration')}
       </div>
-      <!-- Stage 3: link editing goes here -->
-      <div class="e-links"></div>
+      <div class="e-links">${_renderEventLinks(e)}</div>
     </div>`;
 }
 
@@ -3853,6 +3908,128 @@ function _updateEventClockSlot(eventId, slot) {
   const e = state.events.find(e => e.id === eventId); if (!e) return;
   const wrap = document.getElementById('e-clock-slot-' + eventId + '-' + slot);
   if (wrap) wrap.outerHTML = _renderEventClockSlot(e, slot);
+}
+
+// ── Events — Links ────────────────────────────────────────────────────────────
+
+const E_LINK_CONFIG = {
+  factions: { field: 'factionIds', label: 'Factions', multi: true },
+  npcs:     { field: 'npcIds',     label: 'NPCs',     multi: true },
+  pins:     { field: 'pinIds',     label: 'Pins',     multi: true },
+  hexes:    { field: 'hexKeys',    label: 'Hexes',    multi: true },
+  quest:    { field: 'questId',    label: 'Quest',    multi: false },
+  session:  { field: 'sessionId',  label: 'Session',  multi: false },
+};
+
+function _evtLinkSource(type) {
+  if (type === 'factions') return state.factions.map(f => ({ id: f.id, label: f.name || 'Unnamed' }));
+  if (type === 'npcs')     return state.npcs.map(n    => ({ id: n.id, label: n.name || 'Unnamed' }));
+  if (type === 'pins')     return state.pins.map(p    => ({ id: p.id, label: p.name || 'Unnamed' }));
+  if (type === 'hexes')    return Object.entries(state.hexes).map(([k, h]) => ({ id: k, label: k + (h.name ? ' · ' + h.name : '') }));
+  if (type === 'quest')    return state.quests.map(q  => ({ id: q.id, label: q.title || 'Untitled' }));
+  if (type === 'session')  return state.sessions.map(s => ({ id: s.id, label: s.title || 'Session' }));
+  return [];
+}
+
+function _evtLinkDisplayName(type, id) {
+  if (type === 'factions') { const f = state.factions.find(f => f.id === id); return f ? (f.name || 'Unnamed') : null; }
+  if (type === 'npcs')     { const n = state.npcs.find(n => n.id === id);     return n ? (n.name || 'Unnamed') : null; }
+  if (type === 'pins')     { const p = state.pins.find(p => p.id === id);     return p ? (p.name || 'Unnamed') : null; }
+  if (type === 'hexes')    { const h = state.hexes[id]; return h !== undefined ? (id + (h.name ? ' · ' + h.name : '')) : null; }
+  return null;
+}
+
+function _evtLinkColor(type, id) {
+  if (type === 'factions') { const f = state.factions.find(f => f.id === id); return f ? f.color : null; }
+  return null;
+}
+
+function _renderEventLinkRow(e, type) {
+  const cfg = E_LINK_CONFIG[type]; if (!cfg) return '';
+
+  if (!cfg.multi) {
+    const val  = e[cfg.field] || '';
+    const opts = _evtLinkSource(type).map(item =>
+      `<option value="${escHtml(item.id)}"${item.id === val ? ' selected' : ''}>${escHtml(item.label)}</option>`
+    ).join('');
+    return `<div class="e-link-row" id="e-link-row-${type}-${e.id}">
+      <span class="e-link-label">${cfg.label}</span>
+      <select class="rumor-select e-link-select" onchange="setEventSingleLink('${e.id}','${cfg.field}',this.value)">
+        <option value="">— none —</option>${opts}
+      </select>
+    </div>`;
+  }
+
+  const ids   = e[cfg.field] || [];
+  const chips = ids.map(id => {
+    const name  = _evtLinkDisplayName(type, id);
+    const color = _evtLinkColor(type, id);
+    const bdr   = color ? `border-left:3px solid ${color};` : '';
+    const lbl   = name !== null ? escHtml(name) : '<em style="color:var(--text-muted)">(deleted)</em>';
+    return `<span class="e-chip" style="${bdr}">${lbl}<button class="e-chip-remove" onclick="removeEventLink('${e.id}','${type}','${escHtml(id)}')" title="Remove">×</button></span>`;
+  }).join('');
+
+  const available = _evtLinkSource(type).filter(item => !ids.includes(item.id));
+  const noMore    = available.length === 0;
+  const tipMsg    = noMore ? 'No ' + cfg.label.toLowerCase() + ' to link' : '';
+  const addBtn    = noMore
+    ? `<button class="e-chip-add-btn" id="e-add-btn-${e.id}-${type}" disabled title="${tipMsg}">+ Add</button>`
+    : `<button class="e-chip-add-btn" id="e-add-btn-${e.id}-${type}" onclick="showEventLinkPicker('${e.id}','${type}')">+ Add</button>`;
+
+  return `<div class="e-link-row" id="e-link-row-${type}-${e.id}">
+    <span class="e-link-label">${cfg.label}</span>
+    <div class="e-chips-wrap">${chips}${addBtn}</div>
+  </div>`;
+}
+
+function _renderEventLinks(e) {
+  return ['factions','npcs','pins','hexes','quest','session']
+    .map(type => _renderEventLinkRow(e, type)).join('');
+}
+
+function _updateEventLinksRow(eventId, type) {
+  const e   = state.events.find(e => e.id === eventId); if (!e) return;
+  const row = document.getElementById('e-link-row-' + type + '-' + eventId);
+  if (row) row.outerHTML = _renderEventLinkRow(e, type);
+}
+
+function showEventLinkPicker(eventId, type) {
+  const e = state.events.find(e => e.id === eventId); if (!e) return;
+  const btn = document.getElementById('e-add-btn-' + eventId + '-' + type); if (!btn) return;
+  const ids = e[E_LINK_CONFIG[type].field] || [];
+  const available = _evtLinkSource(type).filter(item => !ids.includes(item.id));
+  const sel = document.createElement('select');
+  sel.className = 'rumor-select e-chip-picker';
+  sel.innerHTML = `<option value="">Pick…</option>` +
+    available.map(item => `<option value="${escHtml(item.id)}">${escHtml(item.label)}</option>`).join('');
+  sel.onchange = function() { if (sel.value) addEventLink(eventId, type, sel.value); };
+  btn.replaceWith(sel);
+  sel.focus();
+}
+
+function addEventLink(eventId, type, val) {
+  const e = state.events.find(e => e.id === eventId); if (!e) return;
+  const field = E_LINK_CONFIG[type].field;
+  if (!(e[field] || []).includes(val)) e[field] = [...(e[field] || []), val];
+  save();
+  _updateEventLinksRow(eventId, type);
+  renderEventList();
+}
+
+function removeEventLink(eventId, type, val) {
+  const e = state.events.find(e => e.id === eventId); if (!e) return;
+  const field = E_LINK_CONFIG[type].field;
+  e[field] = (e[field] || []).filter(id => id !== val);
+  save();
+  _updateEventLinksRow(eventId, type);
+  renderEventList();
+}
+
+function setEventSingleLink(eventId, field, val) {
+  const e = state.events.find(e => e.id === eventId); if (!e) return;
+  e[field] = val || null;
+  save();
+  renderEventList();
 }
 
 function _evtSearchChange(val) {
