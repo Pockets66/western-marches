@@ -46,9 +46,13 @@ v6 → v7:
 - Fix any `status: "dangerous"` → `"unverified"` (cleanup from earlier planning).
 - Increment schemaVersion to 7.
 
-v7 → v8 (this update):
+v7 → v8:
 - For each NPC: add `disposition: "unknown"`, `description: ""`, `secrets: ""`, `playerKnown: false` if missing.
 - Increment schemaVersion to 8.
+
+v8 → v9:
+- Migration `migrateToV9()`: adds `timeUntilClock: null` and `durationClock: null` to every event.
+- Increment schemaVersion to 9.
 
 Incoming data from partner files (one-time import, not automatic):
 - `wm_sessions_v1` → read players into `state.players`, read sessions into
@@ -64,7 +68,7 @@ Import should be a deliberate user action, not automatic — see future slice.
 
 ```js
 state = {
-  schemaVersion: 8,
+  schemaVersion: 9,
   factions:    [Faction],
   npcs:        [NPC],
   rumors:      [Rumor],
@@ -72,20 +76,27 @@ state = {
   events:      [Event],
   players:     [Player],
   sessions:    [Session],
-  mapMeta:     MapMeta,     // NEW
+  mapMeta:     MapMeta,
   hexes:       { "col,row": Hex },
   pins:        [Pin],
   relations:   { "factionIdA|factionIdB": Relation },
   ui: {
-    activeTab: "map" | "factions" | "rumors" | "quests" | "sessions" | "players",
+    activeTab: "map" | "factions" | "rumors" | "quests"
+             | "sessions" | "players" | "npcs" | "events",
     activeFactionId: string | null,
     activeQuestId:   string | null,
     activeSessionId: string | null,
     activePlayerId:  string | null,
+    activeNpcId:     string | null,
+    activeEventId:   string | null,
     activeHexKey:    string | null,
-    rumorFilter:   string,
-    questFilter:   string,
-    sessionFilter: string,
+    rumorFilter:          string,
+    questFilter:          string,
+    sessionFilter:        string,
+    eventFilter:          string,
+    eventFactionFilter:   string,
+    eventUrgencyFilter:   string,
+    eventPlayerKnownOnly: boolean,
   }
 }
 ```
@@ -265,16 +276,24 @@ A thing that happens NOT during a session, linkable to any combination of entiti
   text: string,
   urgency: Urgency,
   playerKnown: boolean,        // has this been revealed to players?
-  
+  timeUntilClock: { size: 4|6|8|10|12, filled: number } | null,
+  durationClock:  { size: 4|6|8|10|12, filled: number } | null,
+
   // Links — any combination, all optional
   factionIds:  [string],
   npcIds:      [string],
   pinIds:      [string],
   hexKeys:     [string],
   questId:     string | null,
-  sessionId:   string | null,  // NEW — if this happened during a session
+  sessionId:   string | null,  // if this happened during a session
 }
 ```
+
+Each clock is optional (`null` = empty slot). The slot itself identifies the
+clock — there are no `id`, `label`, or `consequence` fields as faction clocks
+have. `timeUntilClock` counts down to when the event triggers; `durationClock`
+tracks how long the event lasts once it starts. `filled` is clamped to `[0, size]`.
+
 Events replace the `interactions` array previously on factions and the `log`
 array previously on NPCs. "Faction X's history" is now a derived filter, not
 stored data.
@@ -448,6 +467,7 @@ What happens when the user deletes an entity. Enforced in the delete handler.
 - **Delete rumor** → no cascade, it's a leaf.
 - **Clear a hex (terrain → unknown)** → does NOT delete pins. Pins remain
   tied to `hexKey` and stay visible. Deleting pins is always explicit.
+  `state.events` is also unaffected — hexKey references on events are permanent.
 - **Delete player** → remove the player id from every session's `attendance` object.
   Do NOT delete sessions. If an event's data includes the player by name (we don't
   model this currently, but might later), flag for review.
@@ -461,13 +481,15 @@ What happens when the user deletes an entity. Enforced in the delete handler.
 - Faction → rumors:  `rumors.filter(r => r.factionId === f.id)`
 - Faction → quests:  `quests.filter(q => q.factionId === f.id)`
 - Faction → events:  `events.filter(e => e.factionIds.includes(f.id))`
-- Pin → NPCs / rumors / quests / events: as above by pin id
+- NPC → events:      `events.filter(e => e.npcIds.includes(n.id))`
+- Pin → NPCs / rumors / quests: as above by pin id
+- Pin → events:      `events.filter(e => e.pinIds.includes(p.id))`
 - Hex → pins:   `pins.filter(p => p.hexKey === key)`
 - Hex → events: `events.filter(e => e.hexKeys.includes(key))`
 - Quest → events: `events.filter(e => e.questId === q.id)`
+- Session → events:    `events.filter(e => e.sessionId === s.id)`
 - Hex → faction influence: aggregate `factionId` over the hex's pins, pick
   dominant (for optional territory-tinting layer)
-- Session → events:    `events.filter(e => e.sessionId === s.id)`
 - Player → sessions:   `sessions.filter(s => s.attendance[p.id])`
 - Hex → players:       `players.filter(pl => pl.currentHexKey === key)`
 - Faction → sessions:  all sessions where this faction appears in `factionsEncountered`

@@ -1293,6 +1293,11 @@ function load() {
       if (state.ui && !('eventFactionFilter'     in state.ui)) state.ui.eventFactionFilter     = '';
       if (state.ui && !('eventUrgencyFilter'     in state.ui)) state.ui.eventUrgencyFilter     = '';
       if (state.ui && !('eventPlayerKnownOnly'   in state.ui)) state.ui.eventPlayerKnownOnly   = false;
+      // Null out dangling single-ref event links so dropdowns show “— none —” for orphaned refs
+      (state.events || []).forEach(e => {
+        if (e.questId   && !(state.quests   || []).find(q => q.id  === e.questId))   e.questId   = null;
+        if (e.sessionId && !(state.sessions || []).find(s => s.id === e.sessionId)) e.sessionId = null;
+      });
       (state.sessions || []).forEach(s => {
         if (!('title'    in s)) s.title    = '';
         if (!('date'     in s)) s.date     = '';
@@ -2150,6 +2155,7 @@ function deleteRumor(id) {
   state.rumors = state.rumors.filter(r => r.id !== id); save();
   renderRumorsActive(); renderRumorsArchived();
 }
+// TODO(slice 15/16): cascade to events.pinIds / events.questId on delete
 
 function setRumorFilter(f) {
   state.ui.rumorFilter = f; save(); renderRumorsActive();
