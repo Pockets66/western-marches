@@ -63,6 +63,11 @@ v9 → v10:
   data migration needed.
 - Increment schemaVersion to 10.
 
+v10 → v11:
+- Migration `migrateToV11()`: no-op. The `Overlay.type` union gained `"route"`;
+  existing overlays remain valid with no data change.
+- Increment schemaVersion to 11.
+
 Incoming data from partner files (one-time import, not automatic):
 - `wm_sessions_v1` → read players into `state.players`, read sessions into
   `state.sessions` (map the existing `planned`/`actual` fields, initialize
@@ -77,7 +82,7 @@ Import should be a deliberate user action, not automatic — see future slice.
 
 ```js
 state = {
-  schemaVersion: 10,
+  schemaVersion: 11,
   factions:    [Faction],
   npcs:        [NPC],
   rumors:      [Rumor],
@@ -106,6 +111,11 @@ state = {
     eventFactionFilter:   string,
     eventUrgencyFilter:   string,
     eventPlayerKnownOnly: boolean,
+    mapMode:        string | null,   // current map tool mode
+    rulerHexA:      string | null,   // "col,row" of first picked ruler hex
+    rulerHexB:      string | null,   // "col,row" of second picked ruler hex
+    rulerMove:      number,          // party Move score (default 5)
+    rulerOverrides: { [hexKey]: string | null },  // per-hex modifier overrides; clears on panel close
   }
 }
 ```
@@ -390,7 +400,7 @@ Edge indices: `0=E, 1=SE, 2=SW, 3=W, 4=NW, 5=NE` for pointy-top hexes
 
 ```js
 {
-  type:     "river" | "road",
+  type:     "river" | "road" | "route",
   edges:    [number],           // 1–6 indices in [0..5], all meeting at hex center
   flowFrom: number | null,      // edge index 0..5 (must be in `edges`); rivers only;
                                 //   null = no flow direction set; null for roads
@@ -408,6 +418,11 @@ Edge indices: `0=E, 1=SE, 2=SW, 3=W, 4=NW, 5=NE` for pointy-top hexes
 **Flow semantics.** `flowFrom` is the edge through which water enters the hex.
 An arrowhead at that edge points INTO the hex; arrowheads at all other edges
 point OUT. If `flowFrom` is null, no arrows are drawn.
+
+**Route overlays** are visually distinct (red dashed, `#a02828`) and ignore `flowFrom`
+and `surface`. Typically created via the travel calculator's "Mark route on map" button;
+can be removed via the Erase Routes toolbar mode. Routes do not grant the road speed
+bonus in travel time calculations (only `type === "road"` does).
 
 **Cascade.** Overlays are leaves attached to hexes — no other entity references
 them. Clearing a hex's terrain does NOT clear its overlays (roads and rivers are

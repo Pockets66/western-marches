@@ -1,4 +1,4 @@
-# Roadmap (as of slice 14 complete)
+# Roadmap (as of slice 14.5 complete)
 
 ## Done
 - Slice 1: Shell + state layer + CSS foundation
@@ -15,12 +15,12 @@
 - Slice 12: NPCs tab (schema v8)
 - Slice 13: Events system (schema v9)
 - Slice 14: Map overlays — rivers and roads (schema v10)
+- Slice 14.5: Travel time calculator + route overlays (schema v11)
 
 ## In progress
 
 
 ## Planned
-- Slice 14.5: Travel time calculator helper
 - Slice 15: Local maps + pins
 - Slice 16: Quests tab
 - Slice 17: Cross-link pass 1 (pin ↔ faction, pin ↔ NPCs)

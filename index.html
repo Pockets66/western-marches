@@ -866,7 +866,7 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
   font-family: 'Cinzel', serif; font-size: 0.68rem; letter-spacing: 0.1em;
   text-transform: uppercase; color: var(--text-muted);
 }
-.map-main { display: flex; flex: 1; overflow: hidden; }
+.map-main { display: flex; flex: 1; overflow: hidden; position: relative; }
 .map-canvas-wrap {
   flex: 1; overflow: auto; background: var(--panel);
   position: relative;
@@ -893,6 +893,27 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
 }
 .map-overlay-group { background: rgba(0,0,0,0.2); border-radius: 4px; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
 .map-overlay-head  { font-family: 'Cinzel', serif; font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold-dim); }
+.r-panel {
+  position: absolute; top: 10px; left: 10px; z-index: 10;
+  width: 275px; max-height: 430px; overflow-y: auto;
+  background: var(--panel-mid); border: 1px solid var(--border-lit); border-radius: 6px;
+  padding: 12px 14px; box-shadow: 0 4px 16px rgba(0,0,0,0.45);
+  font-family: 'Crimson Pro', Georgia, serif; font-size: 0.9rem; color: var(--text);
+}
+.r-panel::-webkit-scrollbar { width: 5px; }
+.r-panel::-webkit-scrollbar-track { background: var(--panel-mid); }
+.r-panel::-webkit-scrollbar-thumb { background: var(--border-lit); }
+.r-panel-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+.r-panel-title { font-family: 'Cinzel', serif; font-size: 0.82rem; letter-spacing: 0.07em; color: var(--gold-pale); text-transform: uppercase; }
+.r-row { display: flex; justify-content: space-between; align-items: baseline; padding: 2px 0; font-size: 0.87rem; }
+.r-label { color: var(--text-dim); }
+.r-val { color: var(--text); font-weight: bold; }
+.r-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-top: 8px; }
+.r-table th { text-align: left; color: var(--text-dim); font-weight: normal; font-family: 'Cinzel', serif; font-size: 0.68rem; letter-spacing: 0.06em; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+.r-table td { padding: 3px 4px 3px 0; border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: middle; }
+.r-water td { color: #e86060; }
+.r-warning { color: #e86060; font-size: 0.82rem; padding: 6px 8px; margin: 6px 0;
+  background: rgba(230,96,96,0.1); border: 1px solid rgba(230,96,96,0.25); border-radius: 4px; }
 .map-tbtn {
   display: flex; align-items: center; gap: 5px; padding: 3px 7px;
   border: 1px solid var(--border); background: transparent; color: var(--text-dim);
@@ -969,6 +990,7 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
       <div class="map-canvas-wrap">
         <canvas id="map-canvas"></canvas>
       </div>
+      <div id="ruler-panel" class="r-panel hidden"></div>
       <div class="map-info-panel" id="map-info-panel">
         <span style="color:var(--text-muted);font-style:italic;font-size:0.85rem">No hex selected.</span>
       </div>
@@ -1233,7 +1255,7 @@ function toast(msg) {
 const STORAGE_KEY = 'wm_unified_v1';
 
 let state = {
-  schemaVersion: 10,
+  schemaVersion: 11,
   factions:  [],
   npcs:      [],
   rumors:    [],
@@ -1261,6 +1283,10 @@ let state = {
     rumorFilter:          '',
     questFilter:          '',
     sessionFilter:        '',
+    rulerHexA:            null,
+    rulerHexB:            null,
+    rulerMove:            5,
+    rulerOverrides:       {},
   },
 };
 
@@ -1278,7 +1304,7 @@ function load() {
   try {
     const parsed = JSON.parse(raw);
     const v = parsed.schemaVersion || 1;
-    if (v <= 10) {
+    if (v <= 11) {
       if (v < 2) migrateFactions(parsed);
       if (v < 3) migrateToV3(parsed);
       if (v < 4) migrateToV4(parsed);
@@ -1288,6 +1314,7 @@ function load() {
       if (v < 8) migrateToV8(parsed);
       if (v < 9) migrateToV9(parsed);
       if (v < 10) migrateToV10(parsed);
+      if (v < 11) migrateToV11(parsed);
       state = parsed;
       if (state.ui && state.ui.activeTab === 'relations') state.ui.activeTab = 'factions';
       if (state.ui && !('activeSessionId'        in state.ui)) state.ui.activeSessionId        = null;
@@ -1296,6 +1323,10 @@ function load() {
       if (state.ui && !('eventFactionFilter'     in state.ui)) state.ui.eventFactionFilter     = '';
       if (state.ui && !('eventUrgencyFilter'     in state.ui)) state.ui.eventUrgencyFilter     = '';
       if (state.ui && !('eventPlayerKnownOnly'   in state.ui)) state.ui.eventPlayerKnownOnly   = false;
+      if (state.ui && !('rulerHexA'        in state.ui)) state.ui.rulerHexA        = null;
+      if (state.ui && !('rulerHexB'        in state.ui)) state.ui.rulerHexB        = null;
+      if (state.ui && !('rulerMove'        in state.ui)) state.ui.rulerMove        = 5;
+      if (state.ui && !('rulerOverrides'   in state.ui)) state.ui.rulerOverrides   = {};
       // Null out dangling single-ref event links so dropdowns show “— none —” for orphaned refs
       (state.events || []).forEach(e => {
         if (e.questId   && !(state.quests   || []).find(q => q.id  === e.questId))   e.questId   = null;
@@ -1412,6 +1443,11 @@ function migrateToV10(parsed) {
   parsed.schemaVersion = 10;
 }
 
+function migrateToV11(parsed) {
+  // No data migration needed — routes are additive, existing overlays unaffected.
+  parsed.schemaVersion = 11;
+}
+
 function migrateFactions(parsed) {
   const activityMap = { dormant: 'dormant', rising: 'active', active: 'active', defeated: 'disbanded' };
   (parsed.factions || []).forEach(f => {
@@ -1508,6 +1544,7 @@ let _mapHoverHex   = null;
 let _mapReady      = false;
 let _mapRafId      = null;
 let _mapLastClickPx = 0, _mapLastClickPy = 0;
+let _rulerPathSet = null;
 let _mapDragLastHex = null;
 
 function _scheduleRedraw() {
@@ -1627,7 +1664,8 @@ function drawWorldHex(c, r) {
   }
 
   if (hex.overlays && hex.overlays.length) {
-    hex.overlays.forEach(ov => {
+    // Roads and rivers first, routes drawn on top
+    hex.overlays.filter(ov => ov.type !== 'route').forEach(ov => {
       const oColor = ov.type === 'river' ? '#5a87b8'
         : ({dirt:'#8b6f47',gravel:'#7a7066',stone:'#9c958a'}[ov.surface] || '#8b6f47');
       const oWidth = ov.type === 'river' ? 3 : 2;
@@ -1647,6 +1685,20 @@ function drawWorldHex(c, r) {
         });
       }
     });
+    const _routeOv = hex.overlays.find(ov => ov.type === 'route');
+    if (_routeOv) {
+      ctx.setLineDash([5, 4]);
+      (_routeOv.edges || []).forEach(eIdx => {
+        const [mx, my] = edgeMidpoint(x, y, eIdx, hexSize);
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(mx, my);
+        ctx.strokeStyle = '#a02828'; ctx.lineWidth = 2.5; ctx.stroke();
+      });
+      ctx.setLineDash([]);
+    }
+  }
+  // Path-highlight gold fill for travel calculator (intermediate hexes only)
+  if (_rulerPathSet && _rulerPathSet.has(c + ',' + r)) {
+    hexPath(); ctx.fillStyle = 'rgba(240,192,64,0.2)'; ctx.fill();
   }
 
   hexPath();
@@ -1711,6 +1763,10 @@ function drawWorldHex(c, r) {
     ctx.lineWidth = 1;
     ctx.stroke();
   }
+  const _rk = c + ',' + r;
+  if (state.ui.rulerHexA === _rk || state.ui.rulerHexB === _rk) {
+    hexPath(); ctx.strokeStyle = '#f0c040'; ctx.lineWidth = 3; ctx.setLineDash([]); ctx.stroke();
+  }
 }
 
 function drawWorld() {
@@ -1729,6 +1785,12 @@ function drawWorld() {
   const bg = ctx.createRadialGradient(CW/2, CH/2, 0, CW/2, CH/2, Math.max(CW, CH));
   bg.addColorStop(0, '#1a1208'); bg.addColorStop(1, '#080502');
   ctx.fillStyle = bg; ctx.fillRect(0, 0, CW, CH);
+  if (state.ui.rulerHexA && state.ui.rulerHexB) {
+    const [_rAc, _rAr] = state.ui.rulerHexA.split(',').map(Number);
+    const [_rBc, _rBr] = state.ui.rulerHexB.split(',').map(Number);
+    const _fp = hexLine({ col: _rAc, row: _rAr }, { col: _rBc, row: _rBr });
+    _rulerPathSet = new Set(_fp.slice(1, -1).map(h => h.col + ',' + h.row));
+  } else { _rulerPathSet = null; }
   for (let r = rowMin; r <= rowMax; r++) for (let c = colMin; c <= colMax; c++) drawWorldHex(c, r);
   updateMapStatus();
 }
@@ -1749,11 +1811,12 @@ function _buildMapToolbar() {
   const tools = [['select','Select'],['paint','Paint'],['erase','Erase'],['explored','Explored']]
     .map(([m,l]) => _toolBtn(m,l)).join('');
   const overlayTools = [['paintRoad','🛤️ Roads'],['paintRiver','🌊 Rivers'],
-    ['eraseRoad','Erase Road'],['eraseRiver','Erase River']]
+    ['eraseRoad','Erase Road'],['eraseRiver','Erase River'],['eraseRoute','Erase Route']]
     .map(([m,l]) => _toolBtn(m,l)).join('');
   const sep = `<div style="width:1px;height:18px;background:var(--border);margin:0 2px;flex-shrink:0"></div>`;
   tb.innerHTML = `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
     ${swatches}${sep}${tools}${sep}${overlayTools}${sep}
+    <button class="map-tool-btn${_mapCurMode === 'rulerA' || _mapCurMode === 'rulerB' ? ' active' : ''}" onclick="toggleRulerMode()">🧮 Travel</button>${sep}
     <button class="map-action-btn" onclick="openMapSettings()">Resize Map</button>
     <button class="map-action-btn" onclick="exportMap()">Export</button>
     <button class="map-action-btn" onclick="importMap()">Import</button>
@@ -1770,7 +1833,7 @@ function setMapMode(mode) {
   _mapCurMode = mode;
   document.querySelectorAll('.map-tool-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
   const _cv = _mapCanvas();
-  if (_cv) _cv.style.cursor = /^(paint|erase|explored|paintRoad|paintRiver|eraseRoad|eraseRiver)$/.test(mode) ? 'crosshair' : 'default';
+  if (_cv) _cv.style.cursor = /^(paint|erase|explored|paintRoad|paintRiver|eraseRoad|eraseRiver|eraseRoute|rulerA|rulerB)$/.test(mode) ? 'crosshair' : 'default';
   updateMapStatus();
 }
 
@@ -1796,7 +1859,7 @@ function _addOverlayEdgeRaw(hex, T, edgeIdx) {
 }
 
 function _eraseOverlay(c, r) {
-  const T = _mapCurMode === 'eraseRoad' ? 'road' : 'river';
+  const T = _mapCurMode === 'eraseRoad' ? 'road' : _mapCurMode === 'eraseRiver' ? 'river' : 'route';
   const hex = getHex(c, r);
   hex.overlays = hex.overlays.filter(o => o.type !== T);
 }
@@ -1818,9 +1881,9 @@ function updateMapStatus() {
   const sb = document.getElementById('map-statusbar'); if (!sb) return;
   const hex = _mapHoverHex || _mapSelHex;
   const coord = hex ? hex.col + ', ' + hex.row : '—';
-  const modeLabel = { paintRoad: 'PAINT ROAD', paintRiver: 'PAINT RIVER', eraseRoad: 'ERASE ROAD', eraseRiver: 'ERASE RIVER' }[_mapCurMode]
+  const modeLabel = { paintRoad: 'PAINT ROAD', paintRiver: 'PAINT RIVER', eraseRoad: 'ERASE ROAD', eraseRiver: 'ERASE RIVER', eraseRoute: 'ERASE ROUTE', rulerA: 'RULER — PICK A', rulerB: 'RULER — PICK B' }[_mapCurMode]
     || _mapCurMode.toUpperCase();
-  const brushPart = /^(paintRoad|paintRiver|eraseRoad|eraseRiver)$/.test(_mapCurMode) ? ''
+  const brushPart = /^(paintRoad|paintRiver|eraseRoad|eraseRiver|eraseRoute|rulerA|rulerB)$/.test(_mapCurMode) ? ''
     : ' | BRUSH: ' + (TNAMES[_mapCurTerrain] || _mapCurTerrain).toUpperCase();
   sb.textContent = 'MODE: ' + modeLabel + brushPart + ' | HEX: ' + coord;
 }
@@ -1834,7 +1897,7 @@ function _initMapEvents() {
     const rect = canvas.getBoundingClientRect();
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   }
-  const _isOverlayMode = () => /^(paintRoad|paintRiver|eraseRoad|eraseRiver)$/.test(_mapCurMode);
+  const _isOverlayMode = () => /^(paintRoad|paintRiver|eraseRoad|eraseRiver|eraseRoute)$/.test(_mapCurMode);
 
   canvas.addEventListener('mousedown', e => {
     if (e.button !== 0) return;
@@ -1847,10 +1910,17 @@ function _initMapEvents() {
       _mapDragLastHex = h;
       applyOverlayPaint(h.col, h.row, x, y);
       _scheduleRedraw();
-    } else if (_mapCurMode === 'eraseRoad' || _mapCurMode === 'eraseRiver') {
+    } else if (_mapCurMode === 'eraseRoad' || _mapCurMode === 'eraseRiver' || _mapCurMode === 'eraseRoute') {
       _mapDragLastHex = h;
       _eraseOverlay(h.col, h.row);
       _scheduleRedraw();
+    } else if (_mapCurMode === 'rulerA') {
+      state.ui.rulerHexA = h.col + ',' + h.row;
+      state.ui.rulerHexB = null;
+      save(); setMapMode('rulerB'); _buildMapToolbar(); drawWorld();
+    } else if (_mapCurMode === 'rulerB') {
+      state.ui.rulerHexB = h.col + ',' + h.row;
+      save(); drawWorld(); renderRulerPanel();
     } else {
       if (_mapCurMode === 'explored') { const hex = getHex(h.col, h.row); _mapExploreIntent = !hex.explored; }
       _mapSelHex = h;
@@ -1875,13 +1945,13 @@ function _initMapEvents() {
         _mapDragLastHex = h;
         _scheduleRedraw();
       }
-    } else if (_mapCurMode === 'eraseRoad' || _mapCurMode === 'eraseRiver') {
+    } else if (_mapCurMode === 'eraseRoad' || _mapCurMode === 'eraseRiver' || _mapCurMode === 'eraseRoute') {
       if (_mapDragLastHex && (h.col !== _mapDragLastHex.col || h.row !== _mapDragLastHex.row)) {
         _eraseOverlay(h.col, h.row);
         _mapDragLastHex = h;
         _scheduleRedraw();
       }
-    } else if (_mapCurMode !== 'select') {
+    } else if (_mapCurMode !== 'select' && _mapCurMode !== 'rulerA' && _mapCurMode !== 'rulerB') {
       applyMapMode(h.col, h.row);
     }
   });
@@ -2017,6 +2087,204 @@ function mapSaveNoteFlash() {
 }
 
 // ── Map — settings modal ─────────────────────────────────────────────────────
+
+// ── Map — ruler / travel time ──────────────────────────────────────────────
+
+function axialToCube({col, row}) {
+  const q = col - (row - (row & 1)) / 2;
+  return { q, r: row, s: -q - row };
+}
+
+function cubeToAxial({q, r}) {
+  const row = r;
+  return { col: q + (row - (row & 1)) / 2, row };
+}
+
+function cubeDistance(A, B) {
+  return Math.max(Math.abs(A.q-B.q), Math.abs(A.r-B.r), Math.abs(A.s-B.s));
+}
+
+function cubeLerp(A, B, t) {
+  return { q: A.q+(B.q-A.q)*t, r: A.r+(B.r-A.r)*t, s: A.s+(B.s-A.s)*t };
+}
+
+function cubeRound(c) {
+  let q = Math.round(c.q), r = Math.round(c.r), s = Math.round(c.s);
+  const dq = Math.abs(q-c.q), dr = Math.abs(r-c.r), ds = Math.abs(s-c.s);
+  if (dq > dr && dq > ds) q = -r-s;
+  else if (dr > ds)        r = -q-s;
+  else                     s = -q-r;
+  return { q, r, s };
+}
+
+function hexLine(a, b) {
+  const A = axialToCube(a), B = axialToCube(b);
+  const N = cubeDistance(A, B);
+  const result = [];
+  for (let i = 0; i <= N; i++) {
+    const t = N === 0 ? 0 : i / N;
+    result.push(cubeToAxial(cubeRound(cubeLerp(A, B, t))));
+  }
+  return result;
+}
+
+function modifierFor(hexKey) {
+  const _ov = state.ui.rulerOverrides && state.ui.rulerOverrides[hexKey];
+  if (_ov) switch (_ov) {
+    case 'plains':     return 1.0;
+    case 'hills':      return 0.5;
+    case 'mountain':   return 0.25;
+    case 'impassable': return 0;
+  }
+  const h = state.hexes[hexKey];
+  if (!h) return 0.5;
+  if (h.overlays && h.overlays.some(o => o.type === 'road')) return 1.0;
+  switch (h.terrain) {
+    case 'plains': case 'settled':                                    return 1.0;
+    case 'hills':  case 'forest':                                     return 0.5;
+    case 'mountain': case 'swamp': case 'desert':
+    case 'dark-forest': case 'ruins':                                 return 0.25;
+    case 'water':                                                      return 0;
+    default:                                                           return 0.5;
+  }
+}
+
+function daysForPath(pathKeys, move) {
+  let days = 0, waterHexes = 0;
+  pathKeys.forEach(key => {
+    const m = modifierFor(key);
+    if (m === 0) { waterHexes++; return; }
+    days += 1.25 / (move * m);
+  });
+  return { days, waterHexes };
+}
+
+function toggleRulerMode() {
+  if (_mapCurMode === 'rulerA' || _mapCurMode === 'rulerB') {
+    hideRulerPanel();
+  } else {
+    state.ui.rulerHexA = null; state.ui.rulerHexB = null;
+    const p = document.getElementById('ruler-panel'); if (p) p.classList.add('hidden');
+    setMapMode('rulerA'); _buildMapToolbar(); drawWorld();
+  }
+}
+
+function hideRulerPanel() {
+  const p = document.getElementById('ruler-panel'); if (p) p.classList.add('hidden');
+  state.ui.rulerHexA = null; state.ui.rulerHexB = null;
+  state.ui.rulerOverrides = {};
+  if (_mapCurMode === 'rulerA' || _mapCurMode === 'rulerB') setMapMode('select');
+  _buildMapToolbar(); save(); drawWorld();
+}
+
+function updateRulerMove(val) {
+  const n = parseInt(val);
+  if (!isNaN(n) && n >= 1 && n <= 20) { state.ui.rulerMove = n; save(); renderRulerPanel(); }
+}
+
+function formatDays(v) {
+  if (v <= 0.1) return '< ½ day';
+  const r = Math.round(v * 2) / 2;
+  if (r < 1) return '½ day';
+  const whole = Math.floor(r), frac = r - whole;
+  const suffix = (whole === 1 && frac === 0) ? ' day' : ' days';
+  return (frac === 0 ? whole : whole + '.5') + suffix;
+}
+
+function setRulerOverride(key, val) {
+  if (!state.ui.rulerOverrides) state.ui.rulerOverrides = {};
+  if (val === 'auto') delete state.ui.rulerOverrides[key];
+  else state.ui.rulerOverrides[key] = val;
+  save(); drawWorld(); renderRulerPanel();
+}
+
+function markRouteOnMap() {
+  const aKey = state.ui.rulerHexA, bKey = state.ui.rulerHexB;
+  if (!aKey || !bKey) return;
+  const [aC, aR] = aKey.split(',').map(Number);
+  const [bC, bR] = bKey.split(',').map(Number);
+  const fp = hexLine({ col: aC, row: aR }, { col: bC, row: bR });
+  if (fp.length < 2) { save(); drawWorld(); return; }
+  for (let i = 0; i < fp.length - 1; i++) {
+    const eL = _sharedEdge(fp[i], fp[i+1]);
+    if (eL !== -1) {
+      _addOverlayEdgeRaw(getHex(fp[i].col, fp[i].row), 'route', eL);
+      _addOverlayEdgeRaw(getHex(fp[i+1].col, fp[i+1].row), 'route', (eL+3)%6);
+    }
+  }
+  save(); drawWorld();
+}
+
+function renderRulerPanel() {
+  const panel = document.getElementById('ruler-panel'); if (!panel) return;
+  const aKey = state.ui.rulerHexA, bKey = state.ui.rulerHexB;
+  if (!aKey || !bKey) { panel.classList.add('hidden'); return; }
+  const [aC, aR] = aKey.split(',').map(Number);
+  const [bC, bR] = bKey.split(',').map(Number);
+  const fullPath = hexLine({ col: aC, row: aR }, { col: bC, row: bR });
+  const pathKeys = fullPath.slice(1).map(h => h.col + ',' + h.row);
+  const move = state.ui.rulerMove || 5;
+  const { days, waterHexes } = daysForPath(pathKeys, move);
+  const N = fullPath.length - 1;
+  const hexLabel = (col, row) => { const h = state.hexes[col+','+row]; return (h && h.name) ? escHtml(h.name) : '('+col+','+row+')'; };
+  const allWater = waterHexes > 0 && pathKeys.length === waterHexes;
+  const daysStr = allWater ? '—' : (pathKeys.length === 0 ? '0 days' : formatDays(days));
+  const warningHtml = waterHexes > 0
+    ? '<div class="r-warning">&#x26A0; Path crosses ' + waterHexes + ' impassable hex' + (waterHexes>1?'es':'')
+      + '.<br>Days shown exclude impassable hexes.</div>' : '';
+  const rowsHtml = pathKeys.map(key => {
+    const [kc, kr] = key.split(',').map(Number);
+    const h = state.hexes[key];
+    const hasRoad = h && h.overlays && h.overlays.some(o => o.type === 'road');
+    const terrainLabel = hasRoad ? 'road' : ((h && h.terrain) || 'unknown');
+    const m = modifierFor(key);
+    const hexDays = m === 0 ? null : 1.25 / (move * m);
+    const curOv = (state.ui.rulerOverrides && state.ui.rulerOverrides[key]) || '';
+    const ovSel = (v) => curOv === v ? ' selected' : '';
+    const ovHtml = '<select style="font-size:0.73rem;background:var(--panel-dark);border:1px solid var(--border);color:var(--text);max-width:72px"'
+      + ' onchange="setRulerOverride(\'' + key + '\',this.value)">'  
+      + '<option value="auto"' + ovSel('') + '>(auto)</option>'
+      + '<option value="plains"' + ovSel('plains') + '>×1.0</option>'
+      + '<option value="hills"' + ovSel('hills') + '>×0.5</option>'
+      + '<option value="mountain"' + ovSel('mountain') + '>×0.25</option>'
+      + '<option value="impassable"' + ovSel('impassable') + '>block</option>'
+      + '</select>';
+    return '<tr' + (m === 0 ? ' class="r-water"' : '') + '><td>('+kc+','+kr+')</td><td>'
+      + escHtml(terrainLabel) + '</td><td>' + (m===0?'—':m.toFixed(2))
+      + '</td><td>' + (hexDays===null?'&#x26A0;':hexDays.toFixed(2))
+      + '</td><td>' + ovHtml + '</td></tr>';
+  }).join('');
+  panel.innerHTML = `
+    <div class="r-panel-header">
+      <div class="r-panel-title">Travel Time</div>
+      <button onclick="hideRulerPanel()" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:1.1rem;padding:0;line-height:1">&#x2715;</button>
+    </div>
+    <div class="r-row"><span class="r-label">From</span><span class="r-val">${hexLabel(aC, aR)}</span></div>
+    <div class="r-row"><span class="r-label">To</span><span class="r-val">${hexLabel(bC, bR)}</span></div>
+    <div class="r-row" style="margin-top:8px;align-items:center">
+      <span class="r-label">Party Move</span>
+      <input type="number" min="1" max="20" value="${move}"
+        style="width:50px;background:var(--panel-dark);border:1px solid var(--border);color:var(--text);padding:2px 5px;text-align:center;font-size:0.9rem"
+        oninput="updateRulerMove(this.value)">
+    </div>
+    ${warningHtml}
+    <div class="r-row" style="margin-top:6px;border-top:1px solid var(--border);padding-top:6px">
+      <span class="r-label">Distance</span>
+      <span class="r-val">${N} hex${N!==1?"es":""} (${N*5} mi)</span>
+    </div>
+    <div class="r-row">
+      <span class="r-label">Total days</span>
+      <span class="r-val">${daysStr}</span>
+    </div>
+    <button onclick="markRouteOnMap()" style="margin-top:8px;width:100%;padding:5px;background:rgba(160,40,40,0.18);border:1px solid rgba(160,40,40,0.45);color:#c87070;font-family:Cinzel,serif;font-size:0.75rem;letter-spacing:0.06em;cursor:pointer;border-radius:3px">
+      🗺️ Mark route on map
+    </button>
+    <table class="r-table" style="margin-top:10px">
+      <thead><tr><th>Hex</th><th>Terrain</th><th>Mod</th><th>Days</th><th>Override</th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>`;
+  panel.classList.remove('hidden');
+}
 
 function openMapSettings() {
   document.getElementById('ms-west').value  = 0;
