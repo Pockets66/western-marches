@@ -1595,6 +1595,41 @@ function _sharedEdge(hexA, hexB) {
   return -1;
 }
 
+function hashString(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+// Per-type tangent offsets (pixels) — keeps overlays visually separated on shared edges
+const OVERLAY_OFFSET = { river: -3, road: +3, route: +6 };
+
+function offsetEndpoint(cx, cy, eIdx, hexSize, type) {
+  const [mx, my] = edgeMidpoint(cx, cy, eIdx, hexSize);
+  // Tangent is 90° CCW of the edge normal (normal points at angle 60°*eIdx)
+  const a = (Math.PI / 3) * eIdx;
+  const tx = -Math.sin(a), ty = Math.cos(a);
+  const off = OVERLAY_OFFSET[type] || 0;
+  return [mx + tx * off, my + ty * off];
+}
+
+function drawSpokeBezier(ctx, cx, cy, eIdx, hexSize, type, color, width, hexKeyStr) {
+  const [ex, ey] = offsetEndpoint(cx, cy, eIdx, hexSize, type);
+  const dx = ex - cx, dy = ey - cy;
+  const px = -dy, py = dx;  // perpendicular to spoke direction
+  const bow = type === 'river' ? 0.18 : 0.08;
+  const seed = hashString(hexKeyStr + ':' + eIdx + ':' + type);
+  const wobble = ((seed % 1000) / 1000 - 0.5) * 2;  // -1..+1
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.quadraticCurveTo(
+    cx + dx * 0.6 + px * bow * wobble,
+    cy + dy * 0.6 + py * bow * wobble,
+    ex, ey
+  );
+  ctx.strokeStyle = color; ctx.lineWidth = width; ctx.stroke();
+}
+
 function pxToHex(px, py) {
   const { colMin, colMax, rowMin, rowMax, hexSize } = state.mapMeta;
   let b = null, bd = Infinity;
@@ -1664,37 +1699,29 @@ function drawWorldHex(c, r) {
   }
 
   if (hex.overlays && hex.overlays.length) {
-    // Roads and rivers first, routes drawn on top
-    hex.overlays.filter(ov => ov.type !== 'route').forEach(ov => {
-      const oColor = ov.type === 'river' ? '#5a87b8'
+    // Z-order: rivers → roads → routes (roads visually bridge rivers)
+    const _hk = c + ',' + r;
+    ['river', 'road', 'route'].forEach(ovType => {
+      const ov = hex.overlays.find(o => o.type === ovType);
+      if (!ov || !ov.edges.length) return;
+      const oColor = ovType === 'river' ? '#5a87b8'
+        : ovType === 'route' ? '#a02828'
         : ({dirt:'#8b6f47',gravel:'#7a7066',stone:'#9c958a'}[ov.surface] || '#8b6f47');
-      const oWidth = ov.type === 'river' ? 3 : 2;
+      const oWidth = ovType === 'river' ? 3 : ovType === 'route' ? 2.5 : 2;
+      if (ovType === 'route') ctx.setLineDash([5, 4]); else ctx.setLineDash([]);
+      ov.edges.forEach(eIdx => drawSpokeBezier(ctx, x, y, eIdx, hexSize, ovType, oColor, oWidth, _hk));
       ctx.setLineDash([]);
-      (ov.edges || []).forEach(eIdx => {
-        const [mx, my] = edgeMidpoint(x, y, eIdx, hexSize);
-        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(mx, my);
-        ctx.strokeStyle = oColor; ctx.lineWidth = oWidth; ctx.stroke();
-      });
-      if (ov.type === 'river' && ov.flowFrom !== null) {
-        (ov.edges || []).forEach(eIdx => {
-          const [mx, my] = edgeMidpoint(x, y, eIdx, hexSize);
+      // Flow arrows for rivers — positioned at the offset endpoint
+      if (ovType === 'river' && ov.flowFrom !== null) {
+        ov.edges.forEach(eIdx => {
+          const [ex, ey] = offsetEndpoint(x, y, eIdx, hexSize, 'river');
           const isSource = eIdx === ov.flowFrom;
-          const dx = isSource ? (x - mx) : (mx - x);
-          const dy = isSource ? (y - my) : (my - y);
-          _drawArrowhead(ctx, mx, my, dx, dy, 6, oColor);
+          const adx = isSource ? (x - ex) : (ex - x);
+          const ady = isSource ? (y - ey) : (ey - y);
+          _drawArrowhead(ctx, ex, ey, adx, ady, 6, oColor);
         });
       }
     });
-    const _routeOv = hex.overlays.find(ov => ov.type === 'route');
-    if (_routeOv) {
-      ctx.setLineDash([5, 4]);
-      (_routeOv.edges || []).forEach(eIdx => {
-        const [mx, my] = edgeMidpoint(x, y, eIdx, hexSize);
-        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(mx, my);
-        ctx.strokeStyle = '#a02828'; ctx.lineWidth = 2.5; ctx.stroke();
-      });
-      ctx.setLineDash([]);
-    }
   }
   // Path-highlight gold fill for travel calculator (intermediate hexes only)
   if (_rulerPathSet && _rulerPathSet.has(c + ',' + r)) {

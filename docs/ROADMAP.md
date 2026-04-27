@@ -1,4 +1,4 @@
-# Roadmap (as of slice 14.5 complete)
+# Roadmap (as of slice 14.7 complete)
 
 ## Done
 - Slice 1: Shell + state layer + CSS foundation
@@ -16,6 +16,7 @@
 - Slice 13: Events system (schema v9)
 - Slice 14: Map overlays — rivers and roads (schema v10)
 - Slice 14.5: Travel time calculator + route overlays (schema v11)
+- Slice 14.7: Smooth overlay rendering + Bezier curves + bridge semantics
 
 ## In progress
 

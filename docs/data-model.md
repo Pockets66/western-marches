@@ -424,6 +424,17 @@ and `surface`. Typically created via the travel calculator's "Mark route on map"
 can be removed via the Erase Routes toolbar mode. Routes do not grant the road speed
 bonus in travel time calculations (only `type === "road"` does).
 
+**Rendering (slice 14.7+).** Spokes are quadratic Bezier curves from hex center
+to a per-type offset point near the edge midpoint, not straight lines.
+Per-type tangent offsets (`OVERLAY_OFFSET`: river −3px, road +3px, route +6px)
+keep overlays visually separated on shared edges. Render order (bottom to top):
+terrain → rivers → roads → routes → path-highlight. Curve bow is small (0.18 of
+spoke length for rivers, 0.08 for roads/routes) and seeded deterministically per
+`(hexKey, edgeIdx, overlayType)` so redraws are identical. Bridge semantics:
+a hex with both a road and a river overlay is passable (road's ×1.0 modifier wins)
+regardless of underlying terrain — the road-first check in `modifierFor()` is
+intentional, not accidental.
+
 **Cascade.** Overlays are leaves attached to hexes — no other entity references
 them. Clearing a hex's terrain does NOT clear its overlays (roads and rivers are
 independent of terrain). Resizing the map to shrink bounds deletes out-of-bounds
