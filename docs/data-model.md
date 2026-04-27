@@ -54,6 +54,15 @@ v8 → v9:
 - Migration `migrateToV9()`: adds `timeUntilClock: null` and `durationClock: null` to every event.
 - Increment schemaVersion to 9.
 
+v9 → v10:
+- Migration `migrateToV10()`: ensures every hex has `overlays: []` defensively.
+  The `edges` constraint relaxed from "1 or 2" to "1–6" (no data change; old data with
+  1–2 edges is valid in v10). New optional `surface` field added to road overlays;
+  defaults to `'dirt'`. `flowFrom` semantics changed from "array index into edges"
+  to "edge index 0..5 directly" — but no existing rivers had `flowFrom` set, so no
+  data migration needed.
+- Increment schemaVersion to 10.
+
 Incoming data from partner files (one-time import, not automatic):
 - `wm_sessions_v1` → read players into `state.players`, read sessions into
   `state.sessions` (map the existing `planned`/`actual` fields, initialize
@@ -68,7 +77,7 @@ Import should be a deliberate user action, not automatic — see future slice.
 
 ```js
 state = {
-  schemaVersion: 9,
+  schemaVersion: 10,
   factions:    [Faction],
   npcs:        [NPC],
   rumors:      [Rumor],
@@ -376,13 +385,34 @@ Pins are NOT nested in hexes. Filter `state.pins` by `hexKey`.
 
 ### Overlay
 
+Edge indices: `0=E, 1=SE, 2=SW, 3=W, 4=NW, 5=NE` for pointy-top hexes
+(derived from the `hexCorner` angle formula `60*i - 30` degrees).
+
 ```js
 {
-  type: "river" | "road",
-  edges: [number],             // 1 or 2 edge indices, 0..5
-  flowFrom: 0 | 1,             // which edge in `edges` is the source (rivers only)
+  type:     "river" | "road",
+  edges:    [number],           // 1–6 indices in [0..5], all meeting at hex center
+  flowFrom: number | null,      // edge index 0..5 (must be in `edges`); rivers only;
+                                //   null = no flow direction set; null for roads
+  surface:  "dirt" | "gravel" | "stone",  // roads only; default "dirt";
+                                          //   ignored / not stored on rivers
 }
 ```
+
+**Multi-edge semantics.** All edges meet at the hex center, forming a star:
+- 1 edge = stub (half-line from center)
+- 2 edges = pass-through or bend
+- 3 edges = Y-junction
+- Up to 6 edges = full cluster
+
+**Flow semantics.** `flowFrom` is the edge through which water enters the hex.
+An arrowhead at that edge points INTO the hex; arrowheads at all other edges
+point OUT. If `flowFrom` is null, no arrows are drawn.
+
+**Cascade.** Overlays are leaves attached to hexes — no other entity references
+them. Clearing a hex's terrain does NOT clear its overlays (roads and rivers are
+independent of terrain). Resizing the map to shrink bounds deletes out-of-bounds
+hexes entirely, which removes their overlays as part of the hex deletion.
 
 ### Pin
 
@@ -404,6 +434,10 @@ A pin's NPCs:    `state.npcs.filter(n => n.pinId === pin.id)`
 A pin's rumors:  `state.rumors.filter(r => r.pinId === pin.id)`
 A pin's quests:  `state.quests.filter(q => q.pinId === pin.id)`
 A pin's events:  `state.events.filter(e => e.pinIds.includes(pin.id))`
+
+### Overlay
+
+*(See the Overlay section under Hex above.)*
 
 ### Relation
 
@@ -465,14 +499,16 @@ What happens when the user deletes an entity. Enforced in the delete handler.
   Do NOT delete events — they happened.
 - **Delete event** → no cascade, it's a leaf.
 - **Delete rumor** → no cascade, it's a leaf.
-- **Clear a hex (terrain → unknown)** → does NOT delete pins. Pins remain
-  tied to `hexKey` and stay visible. Deleting pins is always explicit.
-  `state.events` is also unaffected — hexKey references on events are permanent.
+- **Clear a hex (terrain → unknown)** → does NOT delete pins or overlays. Roads
+  and rivers are independent of terrain and remain intact. Deleting pins and
+  removing overlays are always explicit operations.
 - **Delete player** → remove the player id from every session's `attendance` object.
-  Do NOT delete sessions. If an event's data includes the player by name (we don't
-  model this currently, but might later), flag for review.
+  Do NOT delete sessions.
 - **Delete session** → set `sessionId = null` on every event that referenced it.
   Do NOT delete events — they happened.
+- **Resize map (shrink bounds)** → hexes that fall outside the new bounds are
+  deleted via `delete state.hexes[k]`, removing their overlays as part of the
+  hex. No other cascade needed.
 
 ## Derived views (computed, never stored)
 

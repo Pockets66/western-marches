@@ -1,4 +1,4 @@
-# Roadmap (as of slice 13 complete)
+# Roadmap (as of slice 14 complete)
 
 ## Done
 - Slice 1: Shell + state layer + CSS foundation
@@ -14,12 +14,12 @@
 - Slice 11: Rumors board with archive (schema v7)
 - Slice 12: NPCs tab (schema v8)
 - Slice 13: Events system (schema v9)
+- Slice 14: Map overlays — rivers and roads (schema v10)
 
 ## In progress
 
 
 ## Planned
-- Slice 14: Map overlays (rivers, roads)
 - Slice 14.5: Travel time calculator helper
 - Slice 15: Local maps + pins
 - Slice 16: Quests tab
