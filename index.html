@@ -891,6 +891,8 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
   font-family: 'Cinzel', serif; font-size: 0.6rem; letter-spacing: 0.1em;
   text-transform: uppercase; color: var(--text-muted);
 }
+.map-overlay-group { background: rgba(0,0,0,0.2); border-radius: 4px; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.map-overlay-head  { font-family: 'Cinzel', serif; font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold-dim); }
 .map-tbtn {
   display: flex; align-items: center; gap: 5px; padding: 3px 7px;
   border: 1px solid var(--border); background: transparent; color: var(--text-dim);
@@ -1495,6 +1497,7 @@ const TICONS = {
   mountain: '▲', water: '≋', swamp: '⊛', desert: '∿', ruins: '⚔', settled: '⌂',
 };
 const TORDER = ['plains','forest','dark-forest','hills','mountain','water','swamp','desert','ruins','settled','unknown'];
+const _EDGE_LABELS = ['E','SE','SW','W','NW','NE']; // matches edgeMidpoint convention: 0=E,1=SE,2=SW,3=W,4=NW,5=NE
 
 let _mapCurTerrain    = 'plains';
 let _mapCurMode       = 'select';
@@ -1587,6 +1590,16 @@ function _blend(h1, h2, t) {
 
 function _mapCanvas() { return document.getElementById('map-canvas'); }
 
+function _drawArrowhead(ctx, tipX, tipY, dx, dy, size, color) {
+  const len = Math.sqrt(dx*dx + dy*dy); if (len < 0.01) return;
+  const ux = dx/len, uy = dy/len, px = -uy, py = ux;
+  ctx.beginPath();
+  ctx.moveTo(tipX, tipY);
+  ctx.lineTo(tipX - ux*size - px*(size*0.5), tipY - uy*size - py*(size*0.5));
+  ctx.lineTo(tipX - ux*size + px*(size*0.5), tipY - uy*size + py*(size*0.5));
+  ctx.closePath(); ctx.fillStyle = color; ctx.fill();
+}
+
 function drawWorldHex(c, r) {
   const canvas = _mapCanvas(); if (!canvas) return;
   const ctx = canvas.getContext('2d');
@@ -1615,7 +1628,8 @@ function drawWorldHex(c, r) {
 
   if (hex.overlays && hex.overlays.length) {
     hex.overlays.forEach(ov => {
-      const oColor = ov.type === 'river' ? '#5a87b8' : '#8b6f47';
+      const oColor = ov.type === 'river' ? '#5a87b8'
+        : ({dirt:'#8b6f47',gravel:'#7a7066',stone:'#9c958a'}[ov.surface] || '#8b6f47');
       const oWidth = ov.type === 'river' ? 3 : 2;
       ctx.setLineDash([]);
       (ov.edges || []).forEach(eIdx => {
@@ -1623,6 +1637,15 @@ function drawWorldHex(c, r) {
         ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(mx, my);
         ctx.strokeStyle = oColor; ctx.lineWidth = oWidth; ctx.stroke();
       });
+      if (ov.type === 'river' && ov.flowFrom !== null) {
+        (ov.edges || []).forEach(eIdx => {
+          const [mx, my] = edgeMidpoint(x, y, eIdx, hexSize);
+          const isSource = eIdx === ov.flowFrom;
+          const dx = isSource ? (x - mx) : (mx - x);
+          const dy = isSource ? (y - my) : (my - y);
+          _drawArrowhead(ctx, mx, my, dx, dy, 6, oColor);
+        });
+      }
     });
   }
 
@@ -1873,6 +1896,48 @@ function _initMapEvents() {
 
 // ── Map — info panel ─────────────────────────────────────────────────────────
 
+function _renderOverlayEditor(c, r, hex) {
+  const roadOv  = hex.overlays.find(o => o.type === 'road');
+  const riverOv = hex.overlays.find(o => o.type === 'river');
+  const mkCbs = (T, ov) => _EDGE_LABELS.map((lbl, i) =>
+    `<label style="display:flex;align-items:center;gap:3px;font-size:0.8rem;cursor:pointer">
+      <input type="checkbox" ${ov && ov.edges.includes(i) ? 'checked' : ''}
+        onchange="toggleOverlayEdge(${c},${r},'${T}',${i},this.checked)"> ${lbl}
+    </label>`
+  ).join('');
+  return `
+    <div style="border-top:1px solid var(--border);padding-top:10px;display:flex;flex-direction:column;gap:8px">
+      <div class="map-info-lbl">Overlays</div>
+      <div class="map-overlay-group">
+        <div class="map-overlay-head">Road</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">${mkCbs('road', roadOv)}</div>
+        ${roadOv ? `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:0.8rem">
+          <span style="color:var(--text-dim)">Surface:</span>
+          ${['dirt','gravel','stone'].map(s =>
+            `<label style="display:flex;align-items:center;gap:3px;cursor:pointer">
+              <input type="radio" name="road-surf-${c}x${r}" value="${s}"
+                ${roadOv.surface===s?'checked':''} onchange="setOverlaySurface(${c},${r},'${s}')">
+              <span style="text-transform:capitalize">${s}</span>
+            </label>`
+          ).join('')}
+        </div>` : ''}
+      </div>
+      <div class="map-overlay-group">
+        <div class="map-overlay-head">River</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">${mkCbs('river', riverOv)}</div>
+        ${riverOv && riverOv.edges.length > 0 ? `
+        <div style="display:flex;gap:6px;align-items:center;font-size:0.8rem">
+          <span style="color:var(--text-dim)">Flow from:</span>
+          <select style="background:var(--panel-dark);border:1px solid var(--border);color:var(--text);padding:2px 4px"
+            onchange="setRiverFlowFrom(${c},${r},this.value)">
+            <option value="">— none —</option>
+            ${riverOv.edges.map(i => `<option value="${i}" ${riverOv.flowFrom===i?'selected':''}>${_EDGE_LABELS[i]}</option>`).join('')}
+          </select>
+        </div>` : ''}
+      </div>
+    </div>`;
+}
+
 function renderMapInfo(c, r) {
   const panel = document.getElementById('map-info-panel'); if (!panel) return;
   const hex = getHex(c, r);
@@ -1898,7 +1963,8 @@ function renderMapInfo(c, r) {
         placeholder="Notes about this hex…"
         oninput="updateMapHexField(${c},${r},'note',this.value)">${escHtml(hex.note)}</textarea>
     </div>
-    <button class="map-save-btn" id="map-save-btn" onclick="mapSaveNoteFlash()">Save Note</button>`;
+    <button class="map-save-btn" id="map-save-btn" onclick="mapSaveNoteFlash()">Save Note</button>
+    ${_renderOverlayEditor(c, r, hex)}`;
 }
 
 function toggleMapExplored(c, r, val) {
@@ -1908,6 +1974,34 @@ function toggleMapExplored(c, r, val) {
 function updateMapHexField(c, r, field, val) {
   const hex = getHex(c, r); hex[field] = val; save();
   if (field === 'name') drawWorld();
+}
+
+function toggleOverlayEdge(c, r, T, eIdx, checked) {
+  const hex = getHex(c, r);
+  if (checked) {
+    _addOverlayEdgeRaw(hex, T, eIdx);
+  } else {
+    const ov = hex.overlays.find(o => o.type === T);
+    if (ov) {
+      ov.edges = ov.edges.filter(e => e !== eIdx);
+      if (ov.flowFrom === eIdx) ov.flowFrom = null;
+      if (ov.edges.length === 0) hex.overlays = hex.overlays.filter(o => o.type !== T);
+    }
+  }
+  save(); drawWorld(); renderMapInfo(c, r);
+}
+
+function setOverlaySurface(c, r, surface) {
+  const hex = getHex(c, r);
+  const ov = hex.overlays.find(o => o.type === 'road'); if (!ov) return;
+  ov.surface = surface; save(); drawWorld();
+}
+
+function setRiverFlowFrom(c, r, val) {
+  const hex = getHex(c, r);
+  const ov = hex.overlays.find(o => o.type === 'river'); if (!ov) return;
+  ov.flowFrom = val === '' ? null : parseInt(val);
+  save(); drawWorld();
 }
 
 function mapSaveNoteFlash() {
