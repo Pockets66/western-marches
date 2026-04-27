@@ -1231,7 +1231,7 @@ function toast(msg) {
 const STORAGE_KEY = 'wm_unified_v1';
 
 let state = {
-  schemaVersion: 9,
+  schemaVersion: 10,
   factions:  [],
   npcs:      [],
   rumors:    [],
@@ -1276,7 +1276,7 @@ function load() {
   try {
     const parsed = JSON.parse(raw);
     const v = parsed.schemaVersion || 1;
-    if (v <= 9) {
+    if (v <= 10) {
       if (v < 2) migrateFactions(parsed);
       if (v < 3) migrateToV3(parsed);
       if (v < 4) migrateToV4(parsed);
@@ -1285,6 +1285,7 @@ function load() {
       if (v < 7) migrateToV7(parsed);
       if (v < 8) migrateToV8(parsed);
       if (v < 9) migrateToV9(parsed);
+      if (v < 10) migrateToV10(parsed);
       state = parsed;
       if (state.ui && state.ui.activeTab === 'relations') state.ui.activeTab = 'factions';
       if (state.ui && !('activeSessionId'        in state.ui)) state.ui.activeSessionId        = null;
@@ -1401,6 +1402,14 @@ function migrateToV9(parsed) {
   parsed.schemaVersion = 9;
 }
 
+function migrateToV10(parsed) {
+  parsed.hexes = parsed.hexes || {};
+  Object.values(parsed.hexes).forEach(h => {
+    if (!Array.isArray(h.overlays)) h.overlays = [];
+  });
+  parsed.schemaVersion = 10;
+}
+
 function migrateFactions(parsed) {
   const activityMap = { dormant: 'dormant', rising: 'active', active: 'active', defeated: 'disbanded' };
   (parsed.factions || []).forEach(f => {
@@ -1495,6 +1504,8 @@ let _mapSelHex     = null;
 let _mapHoverHex   = null;
 let _mapReady      = false;
 let _mapRafId      = null;
+let _mapLastClickPx = 0, _mapLastClickPy = 0;
+let _mapDragLastHex = null;
 
 function _scheduleRedraw() {
   if (_mapRafId) return;
@@ -1521,6 +1532,29 @@ function hexCorners(cx, cy, s) {
   const p = []; for (let i = 0; i < 6; i++) p.push(hexCorner(cx, cy, i, s)); return p;
 }
 
+function edgeMidpoint(cx, cy, eIdx, s) {
+  // Edge i is between hexCorner i and i+1; midpoint at angle 60*i degrees
+  // Mapping from hexCorner formula (60*i-30 deg): 0=E, 1=SE, 2=SW, 3=W, 4=NW, 5=NE
+  const a = (Math.PI / 3) * eIdx;
+  const r = s * Math.sqrt(3) / 2;
+  return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+}
+
+// Neighbor offsets [dc, dr] per edge index, keyed by row parity (0=even, 1=odd)
+const _HEX_NEIGHBORS = [
+  [[1,0],[0,1],[-1,1],[-1,0],[-1,-1],[0,-1]],  // even row
+  [[1,0],[1,1],[0,1],[-1,0],[0,-1],[1,-1]],     // odd row
+];
+
+function _sharedEdge(hexA, hexB) {
+  const nb = _HEX_NEIGHBORS[Math.abs(hexA.row % 2)];
+  for (let i = 0; i < 6; i++) {
+    const [dc, dr] = nb[i];
+    if (hexA.col + dc === hexB.col && hexA.row + dr === hexB.row) return i;
+  }
+  return -1;
+}
+
 function pxToHex(px, py) {
   const { colMin, colMax, rowMin, rowMax, hexSize } = state.mapMeta;
   let b = null, bd = Infinity;
@@ -1539,6 +1573,7 @@ function getHex(c, r) {
   if (!('name'     in h)) h.name     = '';
   if (!('note'     in h)) h.note     = '';
   if (!('explored' in h)) h.explored = false;
+  if (!Array.isArray(h.overlays)) h.overlays = [];
   return h;
 }
 
@@ -1576,6 +1611,19 @@ function drawWorldHex(c, r) {
     const g = ctx.createRadialGradient(x, y - hexSize*0.1, 0, x, y, hexSize*0.9);
     g.addColorStop(0, 'rgba(255,255,200,0.07)'); g.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = g; hexPath(); ctx.fill();
+  }
+
+  if (hex.overlays && hex.overlays.length) {
+    hex.overlays.forEach(ov => {
+      const oColor = ov.type === 'river' ? '#5a87b8' : '#8b6f47';
+      const oWidth = ov.type === 'river' ? 3 : 2;
+      ctx.setLineDash([]);
+      (ov.edges || []).forEach(eIdx => {
+        const [mx, my] = edgeMidpoint(x, y, eIdx, hexSize);
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(mx, my);
+        ctx.strokeStyle = oColor; ctx.lineWidth = oWidth; ctx.stroke();
+      });
+    });
   }
 
   hexPath();
@@ -1672,13 +1720,17 @@ function _buildMapToolbar() {
       <span class="map-tswatch" style="background:${TCOLORS[t]}"></span>${TNAMES[t]}
     </button>`
   ).join('');
-  const tools = [['select','Select'],['paint','Paint'],['erase','Erase'],['explored','Explored']].map(([m, l]) =>
+  const _toolBtn = (m, l) =>
     `<button class="map-tool-btn${_mapCurMode === m ? ' active' : ''}" data-mode="${m}"
-        onclick="setMapMode('${m}')">${l}</button>`
-  ).join('');
+        onclick="setMapMode('${m}')">${l}</button>`;
+  const tools = [['select','Select'],['paint','Paint'],['erase','Erase'],['explored','Explored']]
+    .map(([m,l]) => _toolBtn(m,l)).join('');
+  const overlayTools = [['paintRoad','🛤️ Roads'],['paintRiver','🌊 Rivers'],
+    ['eraseRoad','Erase Road'],['eraseRiver','Erase River']]
+    .map(([m,l]) => _toolBtn(m,l)).join('');
   const sep = `<div style="width:1px;height:18px;background:var(--border);margin:0 2px;flex-shrink:0"></div>`;
   tb.innerHTML = `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-    ${swatches}${sep}${tools}${sep}
+    ${swatches}${sep}${tools}${sep}${overlayTools}${sep}
     <button class="map-action-btn" onclick="openMapSettings()">Resize Map</button>
     <button class="map-action-btn" onclick="exportMap()">Export</button>
     <button class="map-action-btn" onclick="importMap()">Import</button>
@@ -1694,6 +1746,8 @@ function setMapTerrain(t) {
 function setMapMode(mode) {
   _mapCurMode = mode;
   document.querySelectorAll('.map-tool-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  const _cv = _mapCanvas();
+  if (_cv) _cv.style.cursor = /^(paint|erase|explored|paintRoad|paintRiver|eraseRoad|eraseRiver)$/.test(mode) ? 'crosshair' : 'default';
   updateMapStatus();
 }
 
@@ -1708,13 +1762,44 @@ function applyMapMode(c, r) {
   if (_mapSelHex && _mapSelHex.col === c && _mapSelHex.row === r) renderMapInfo(c, r);
 }
 
+function _addOverlayEdgeRaw(hex, T, edgeIdx) {
+  let ov = hex.overlays.find(o => o.type === T);
+  if (!ov) {
+    ov = { type: T, edges: [], flowFrom: null };
+    if (T === 'road') ov.surface = 'dirt';
+    hex.overlays.push(ov);
+  }
+  if (!ov.edges.includes(edgeIdx)) ov.edges.push(edgeIdx);
+}
+
+function _eraseOverlay(c, r) {
+  const T = _mapCurMode === 'eraseRoad' ? 'road' : 'river';
+  const hex = getHex(c, r);
+  hex.overlays = hex.overlays.filter(o => o.type !== T);
+}
+
+function applyOverlayPaint(c, r, px, py) {
+  const { hexSize } = state.mapMeta;
+  const { x: cx, y: cy } = hexCenter(c, r);
+  const T = _mapCurMode === 'paintRoad' ? 'road' : 'river';
+  let bestEdge = 0, bestD = Infinity;
+  for (let i = 0; i < 6; i++) {
+    const [mx, my] = edgeMidpoint(cx, cy, i, hexSize);
+    const d = (px - mx) ** 2 + (py - my) ** 2;
+    if (d < bestD) { bestD = d; bestEdge = i; }
+  }
+  _addOverlayEdgeRaw(getHex(c, r), T, bestEdge);
+}
+
 function updateMapStatus() {
   const sb = document.getElementById('map-statusbar'); if (!sb) return;
   const hex = _mapHoverHex || _mapSelHex;
   const coord = hex ? hex.col + ', ' + hex.row : '—';
-  sb.textContent = 'MODE: ' + _mapCurMode.toUpperCase() +
-    ' | BRUSH: ' + (TNAMES[_mapCurTerrain] || _mapCurTerrain).toUpperCase() +
-    ' | HEX: ' + coord;
+  const modeLabel = { paintRoad: 'PAINT ROAD', paintRiver: 'PAINT RIVER', eraseRoad: 'ERASE ROAD', eraseRiver: 'ERASE RIVER' }[_mapCurMode]
+    || _mapCurMode.toUpperCase();
+  const brushPart = /^(paintRoad|paintRiver|eraseRoad|eraseRiver)$/.test(_mapCurMode) ? ''
+    : ' | BRUSH: ' + (TNAMES[_mapCurTerrain] || _mapCurTerrain).toUpperCase();
+  sb.textContent = 'MODE: ' + modeLabel + brushPart + ' | HEX: ' + coord;
 }
 
 // ── Map — events ──────────────────────────────────────────────────────────────
@@ -1726,29 +1811,64 @@ function _initMapEvents() {
     const rect = canvas.getBoundingClientRect();
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   }
+  const _isOverlayMode = () => /^(paintRoad|paintRiver|eraseRoad|eraseRiver)$/.test(_mapCurMode);
+
   canvas.addEventListener('mousedown', e => {
     if (e.button !== 0) return;
     _mapIsDrag = true;
     const { x, y } = cxy(e);
+    _mapLastClickPx = x; _mapLastClickPy = y;
     const h = pxToHex(x, y);
-    if (h) {
-      if (_mapCurMode === 'explored') {
-        const hex = getHex(h.col, h.row);
-        _mapExploreIntent = !hex.explored;
-      }
+    if (!h) return;
+    if (_mapCurMode === 'paintRoad' || _mapCurMode === 'paintRiver') {
+      _mapDragLastHex = h;
+      applyOverlayPaint(h.col, h.row, x, y);
+      _scheduleRedraw();
+    } else if (_mapCurMode === 'eraseRoad' || _mapCurMode === 'eraseRiver') {
+      _mapDragLastHex = h;
+      _eraseOverlay(h.col, h.row);
+      _scheduleRedraw();
+    } else {
+      if (_mapCurMode === 'explored') { const hex = getHex(h.col, h.row); _mapExploreIntent = !hex.explored; }
       _mapSelHex = h;
       applyMapMode(h.col, h.row);
     }
   });
+
   canvas.addEventListener('mousemove', e => {
     const { x, y } = cxy(e);
     const h = pxToHex(x, y);
     _mapHoverHex = h;
     updateMapStatus();
-    if (_mapIsDrag && h && _mapCurMode !== 'select') applyMapMode(h.col, h.row);
+    if (!_mapIsDrag || !h) return;
+    if (_mapCurMode === 'paintRoad' || _mapCurMode === 'paintRiver') {
+      if (_mapDragLastHex && (h.col !== _mapDragLastHex.col || h.row !== _mapDragLastHex.row)) {
+        const T = _mapCurMode === 'paintRoad' ? 'road' : 'river';
+        const eL = _sharedEdge(_mapDragLastHex, h);
+        if (eL !== -1) {
+          _addOverlayEdgeRaw(getHex(_mapDragLastHex.col, _mapDragLastHex.row), T, eL);
+          _addOverlayEdgeRaw(getHex(h.col, h.row), T, (eL + 3) % 6);
+        }
+        _mapDragLastHex = h;
+        _scheduleRedraw();
+      }
+    } else if (_mapCurMode === 'eraseRoad' || _mapCurMode === 'eraseRiver') {
+      if (_mapDragLastHex && (h.col !== _mapDragLastHex.col || h.row !== _mapDragLastHex.row)) {
+        _eraseOverlay(h.col, h.row);
+        _mapDragLastHex = h;
+        _scheduleRedraw();
+      }
+    } else if (_mapCurMode !== 'select') {
+      applyMapMode(h.col, h.row);
+    }
   });
-  canvas.addEventListener('mouseup',    () => { _mapIsDrag = false; });
-  canvas.addEventListener('mouseleave', () => { _mapIsDrag = false; _mapHoverHex = null; updateMapStatus(); });
+
+  function _finishOverlayDrag() {
+    if (_mapIsDrag && _isOverlayMode()) save();
+    _mapIsDrag = false; _mapDragLastHex = null;
+  }
+  canvas.addEventListener('mouseup',    () => { _finishOverlayDrag(); });
+  canvas.addEventListener('mouseleave', () => { _finishOverlayDrag(); _mapHoverHex = null; updateMapStatus(); });
 }
 
 // ── Map — info panel ─────────────────────────────────────────────────────────
