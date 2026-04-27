@@ -1616,6 +1616,33 @@ function _sharedEdge(hexA, hexB) {
   return -1;
 }
 
+function _hexEdgeHasCont(col, row, eIdx, type) {
+  const nb = _HEX_NEIGHBORS[Math.abs(row % 2)];
+  const [dc, dr] = nb[eIdx];
+  const nbHex = state.hexes[`${col+dc},${row+dr}`];
+  const nbOv = nbHex && (nbHex.overlays || []).find(o => o.type === type);
+  return !!(nbOv && nbOv.edges.includes((eIdx + 3) % 6));
+}
+
+function _snapEdgeToExistingEndpoint(col, row, type, targetEdgeIdx) {
+  const hex = state.hexes[`${col},${row}`];
+  const ov = hex && (hex.overlays || []).find(o => o.type === type);
+  if (!ov || !ov.edges.length) return targetEdgeIdx;
+  const { hexSize } = state.mapMeta;
+  const { x: cx, y: cy } = hexCenter(col, row);
+  const [tmx, tmy] = edgeMidpoint(cx, cy, targetEdgeIdx, hexSize);
+  const snapDistSq = (hexSize * Math.sqrt(3) / 2 * 0.5) ** 2;
+  let bestEdge = null, bestD = Infinity;
+  ov.edges.forEach(eIdx => {
+    if (eIdx === targetEdgeIdx) return;
+    if (_hexEdgeHasCont(col, row, eIdx, type)) return;
+    const [mx, my] = edgeMidpoint(cx, cy, eIdx, hexSize);
+    const d = (mx - tmx) ** 2 + (my - tmy) ** 2;
+    if (d < snapDistSq && d < bestD) { bestD = d; bestEdge = eIdx; }
+  });
+  return bestEdge !== null ? bestEdge : targetEdgeIdx;
+}
+
 function hashString(s) {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
@@ -1625,13 +1652,26 @@ function hashString(s) {
 // Per-type tangent offsets (pixels) — keeps overlays visually separated on shared edges
 const OVERLAY_OFFSET = { river: -3, road: +3, route: +6 };
 
+function edgeCorners(cx, cy, eIdx, hexSize) {
+  return [hexCorner(cx, cy, eIdx, hexSize), hexCorner(cx, cy, (eIdx+1)%6, hexSize)];
+}
+
+function edgeOffsetVector(c0, c1) {
+  const dx = c1.x - c0.x, dy = c1.y - c0.y;
+  let nx = -dy, ny = dx;
+  const len = Math.hypot(nx, ny); if (len < 1e-9) return { x: 1, y: 0 };
+  nx /= len; ny /= len;
+  // Globally consistent sign — same edge always offsets the same way
+  if (nx < 0 || (nx === 0 && ny < 0)) { nx = -nx; ny = -ny; }
+  return { x: nx, y: ny };
+}
+
 function offsetEndpoint(cx, cy, eIdx, hexSize, type) {
-  const [mx, my] = edgeMidpoint(cx, cy, eIdx, hexSize);
-  // Tangent is 90° CCW of the edge normal (normal points at angle 60°*eIdx)
-  const a = (Math.PI / 3) * eIdx;
-  const tx = -Math.sin(a), ty = Math.cos(a);
+  const [c0, c1] = edgeCorners(cx, cy, eIdx, hexSize);
+  const m = { x: (c0.x + c1.x) / 2, y: (c0.y + c1.y) / 2 };
+  const v = edgeOffsetVector(c0, c1);
   const off = OVERLAY_OFFSET[type] || 0;
-  return [mx + tx * off, my + ty * off];
+  return [m.x + v.x * off, m.y + v.y * off];
 }
 
 
@@ -2042,9 +2082,13 @@ function _buildMapToolbar() {
         onclick="setMapMode('${m}')">${l}</button>`;
   const tools = [['select','Select'],['paint','Paint'],['erase','Erase'],['explored','Explored']]
     .map(([m,l]) => _toolBtn(m,l)).join('');
-  const overlayTools = [['paintRoad','🛤️ Roads'],['paintRiver','🌊 Rivers'],
-    ['eraseRoad','Erase Road'],['eraseRiver','Erase River'],['eraseRoute','Erase Route']]
-    .map(([m,l]) => _toolBtn(m,l)).join('');
+  const overlayTools = [
+    ['paintRoad','🛤️ Roads',''],['paintRiver','🌊 Rivers',''],
+    ['eraseRoad','Erase Road','Shift+click: single edge'],
+    ['eraseRiver','Erase River','Shift+click: single edge'],
+    ['eraseRoute','Erase Route','Shift+click: single edge']]
+    .map(([m,l,tip]) => `<button class="map-tool-btn${_mapCurMode===m?' active':''}" data-mode="${m}"
+        onclick="setMapMode('${m}')"${tip?` title="${tip}"`:''}>${l}</button>`).join('');
   const sep = `<div style="width:1px;height:18px;background:var(--border);margin:0 2px;flex-shrink:0"></div>`;
   tb.innerHTML = `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
     ${swatches}${sep}${tools}${sep}${overlayTools}${sep}
@@ -2091,6 +2135,31 @@ function _addOverlayEdgeRaw(hex, T, edgeIdx) {
   if (!ov.edges.includes(edgeIdx)) ov.edges.push(edgeIdx);
 }
 
+function _eraseSingleEdge(hex, type, edgeIdx) {
+  const ov = hex.overlays && hex.overlays.find(o => o.type === type);
+  if (!ov) return;
+  ov.edges = ov.edges.filter(e => e !== edgeIdx);
+  if (ov.flowFromEdges) ov.flowFromEdges = ov.flowFromEdges.filter(e => e !== edgeIdx);
+  if (ov.trunkPair && ov.trunkPair.includes(edgeIdx)) ov.trunkPair = null;
+  if (ov.edges.length === 0) hex.overlays = hex.overlays.filter(o => o !== ov);
+}
+
+function _eraseSingleEdgeAt(col, row, px, py) {
+  const { hexSize } = state.mapMeta;
+  const { x: cx, y: cy } = hexCenter(col, row);
+  const T = _mapCurMode === 'eraseRoad' ? 'road' : _mapCurMode === 'eraseRiver' ? 'river' : 'route';
+  const hex = getHex(col, row);
+  const ov = hex.overlays.find(o => o.type === T);
+  if (!ov) return;
+  let bestEdge = null, bestD = Infinity;
+  ov.edges.forEach(eIdx => {
+    const [mx, my] = edgeMidpoint(cx, cy, eIdx, hexSize);
+    const d = (px-mx)**2 + (py-my)**2;
+    if (d < bestD) { bestD = d; bestEdge = eIdx; }
+  });
+  if (bestEdge !== null) { _eraseSingleEdge(hex, T, bestEdge); _invalidateOverlayCache(); }
+}
+
 function _eraseOverlay(c, r) {
   const T = _mapCurMode === 'eraseRoad' ? 'road' : _mapCurMode === 'eraseRiver' ? 'river' : 'route';
   const hex = getHex(c, r);
@@ -2108,7 +2177,8 @@ function applyOverlayPaint(c, r, px, py) {
     const d = (px - mx) ** 2 + (py - my) ** 2;
     if (d < bestD) { bestD = d; bestEdge = i; }
   }
-  _addOverlayEdgeRaw(getHex(c, r), T, bestEdge);
+  const snappedEdge = _snapEdgeToExistingEndpoint(c, r, T, bestEdge);
+  _addOverlayEdgeRaw(getHex(c, r), T, snappedEdge);
   _invalidateOverlayCache();
 }
 
@@ -2147,7 +2217,8 @@ function _initMapEvents() {
       _scheduleRedraw();
     } else if (_mapCurMode === 'eraseRoad' || _mapCurMode === 'eraseRiver' || _mapCurMode === 'eraseRoute') {
       _mapDragLastHex = h;
-      _eraseOverlay(h.col, h.row);
+      if (e.shiftKey) { _eraseSingleEdgeAt(h.col, h.row, x, y); }
+      else { _eraseOverlay(h.col, h.row); }
       _scheduleRedraw();
     } else if (_mapCurMode === 'rulerA') {
       state.ui.rulerHexA = h.col + ',' + h.row;
@@ -2168,21 +2239,37 @@ function _initMapEvents() {
     const h = pxToHex(x, y);
     _mapHoverHex = h;
     updateMapStatus();
+    if (/^(eraseRoad|eraseRiver|eraseRoute)$/.test(_mapCurMode)) {
+      const _cv2 = _mapCanvas();
+      if (_cv2) _cv2.style.cursor = e.shiftKey ? 'cell' : 'crosshair';
+    }
     if (!_mapIsDrag || !h) return;
     if (_mapCurMode === 'paintRoad' || _mapCurMode === 'paintRiver') {
       if (_mapDragLastHex && (h.col !== _mapDragLastHex.col || h.row !== _mapDragLastHex.row)) {
         const T = _mapCurMode === 'paintRoad' ? 'road' : 'river';
         const eL = _sharedEdge(_mapDragLastHex, h);
         if (eL !== -1) {
-          _addOverlayEdgeRaw(getHex(_mapDragLastHex.col, _mapDragLastHex.row), T, eL);
-          _addOverlayEdgeRaw(getHex(h.col, h.row), T, (eL + 3) % 6);
+          const snapL = _snapEdgeToExistingEndpoint(_mapDragLastHex.col, _mapDragLastHex.row, T, eL);
+          const geomEntry = (eL + 3) % 6;
+          const snapEntry = _snapEdgeToExistingEndpoint(h.col, h.row, T, geomEntry);
+          _addOverlayEdgeRaw(getHex(_mapDragLastHex.col, _mapDragLastHex.row), T, snapL);
+          _addOverlayEdgeRaw(getHex(h.col, h.row), T, snapEntry);
+          _invalidateOverlayCache();
         }
         _mapDragLastHex = h;
         _scheduleRedraw();
       }
     } else if (_mapCurMode === 'eraseRoad' || _mapCurMode === 'eraseRiver' || _mapCurMode === 'eraseRoute') {
       if (_mapDragLastHex && (h.col !== _mapDragLastHex.col || h.row !== _mapDragLastHex.row)) {
-        _eraseOverlay(h.col, h.row);
+        if (e.shiftKey) {
+          const _eT = _mapCurMode === 'eraseRoad' ? 'road' : _mapCurMode === 'eraseRiver' ? 'river' : 'route';
+          const _eL = _sharedEdge(_mapDragLastHex, h);
+          if (_eL !== -1) {
+            _eraseSingleEdge(getHex(_mapDragLastHex.col, _mapDragLastHex.row), _eT, _eL);
+            _eraseSingleEdge(getHex(h.col, h.row), _eT, (_eL + 3) % 6);
+            _invalidateOverlayCache();
+          }
+        } else { _eraseOverlay(h.col, h.row); }
         _mapDragLastHex = h;
         _scheduleRedraw();
       }
