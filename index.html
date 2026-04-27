@@ -1255,7 +1255,7 @@ function toast(msg) {
 const STORAGE_KEY = 'wm_unified_v1';
 
 let state = {
-  schemaVersion: 11,
+  schemaVersion: 12,
   factions:  [],
   npcs:      [],
   rumors:    [],
@@ -1304,7 +1304,7 @@ function load() {
   try {
     const parsed = JSON.parse(raw);
     const v = parsed.schemaVersion || 1;
-    if (v <= 11) {
+    if (v <= 12) {
       if (v < 2) migrateFactions(parsed);
       if (v < 3) migrateToV3(parsed);
       if (v < 4) migrateToV4(parsed);
@@ -1315,6 +1315,7 @@ function load() {
       if (v < 9) migrateToV9(parsed);
       if (v < 10) migrateToV10(parsed);
       if (v < 11) migrateToV11(parsed);
+      if (v < 12) migrateToV12(parsed);
       state = parsed;
       if (state.ui && state.ui.activeTab === 'relations') state.ui.activeTab = 'factions';
       if (state.ui && !('activeSessionId'        in state.ui)) state.ui.activeSessionId        = null;
@@ -1446,6 +1447,26 @@ function migrateToV10(parsed) {
 function migrateToV11(parsed) {
   // No data migration needed — routes are additive, existing overlays unaffected.
   parsed.schemaVersion = 11;
+}
+
+function migrateToV12(parsed) {
+  parsed.hexes = parsed.hexes || {};
+  Object.entries(parsed.hexes).forEach(([hexKey, h]) => {
+    if (!Array.isArray(h.overlays)) { h.overlays = []; return; }
+    h.overlays.forEach(o => {
+      if (o.type === 'river') {
+        if (!Array.isArray(o.flowFromEdges)) {
+          o.flowFromEdges = (typeof o.flowFrom === 'number') ? [o.flowFrom] : [];
+          if (Array.isArray(o.edges) && o.edges.length >= 2 && !o.flowFromEdges.length)
+            console.warn('migrateToV12: river without flow info', hexKey, o.edges);
+        }
+        delete o.flowFrom;
+      }
+      if (['river','road','route'].includes(o.type) && !('trunkPair' in o))
+        o.trunkPair = null;
+    });
+  });
+  parsed.schemaVersion = 12;
 }
 
 function migrateFactions(parsed) {
@@ -1613,21 +1634,219 @@ function offsetEndpoint(cx, cy, eIdx, hexSize, type) {
   return [mx + tx * off, my + ty * off];
 }
 
-function drawSpokeBezier(ctx, cx, cy, eIdx, hexSize, type, color, width, hexKeyStr) {
-  const [ex, ey] = offsetEndpoint(cx, cy, eIdx, hexSize, type);
-  const dx = ex - cx, dy = ey - cy;
-  const px = -dy, py = dx;  // perpendicular to spoke direction
-  const bow = type === 'river' ? 0.18 : 0.08;
-  const seed = hashString(hexKeyStr + ':' + eIdx + ':' + type);
-  const wobble = ((seed % 1000) / 1000 - 0.5) * 2;  // -1..+1
-  ctx.beginPath();
-  ctx.moveTo(cx, cy);
-  ctx.quadraticCurveTo(
-    cx + dx * 0.6 + px * bow * wobble,
-    cy + dy * 0.6 + py * bow * wobble,
-    ex, ey
-  );
-  ctx.strokeStyle = color; ctx.lineWidth = width; ctx.stroke();
+
+// ── Overlay network rendering ────────────────────────────────────────────────
+
+let _overlayCacheVersion = 0;
+let _overlayCacheRenderedVersion = -1;
+let _overlayCache = { rivers: null, roads: null, routes: null };
+
+function _invalidateOverlayCache() { _overlayCacheVersion++; }
+
+function catmullRomPts(pts, nSegs) {
+  nSegs = nSegs || 8;
+  if (pts.length < 2) return pts.slice();
+  const result = [];
+  // Phantom endpoints for end-tangents
+  const p = [
+    { x: 2*pts[0].x - pts[1].x, y: 2*pts[0].y - pts[1].y },
+    ...pts,
+    { x: 2*pts[pts.length-1].x - pts[pts.length-2].x, y: 2*pts[pts.length-1].y - pts[pts.length-2].y }
+  ];
+  for (let i = 1; i < p.length - 2; i++) {
+    const p0=p[i-1],p1=p[i],p2=p[i+1],p3=p[i+2];
+    for (let j = 0; j < nSegs; j++) {
+      const t=j/nSegs, t2=t*t, t3=t2*t;
+      result.push({
+        x: 0.5*((2*p1.x)+(-p0.x+p2.x)*t+(2*p0.x-5*p1.x+4*p2.x-p3.x)*t2+(-p0.x+3*p1.x-3*p2.x+p3.x)*t3),
+        y: 0.5*((2*p1.y)+(-p0.y+p2.y)*t+(2*p0.y-5*p1.y+4*p2.y-p3.y)*t2+(-p0.y+3*p1.y-3*p2.y+p3.y)*t3)
+      });
+    }
+  }
+  result.push(pts[pts.length-1]);
+  return result;
+}
+
+function buildNetworkRuns(type) {
+  const { hexSize } = state.mapMeta;
+  const hexMap = {};
+  Object.entries(state.hexes).forEach(([key, hex]) => {
+    const ov = (hex.overlays || []).find(o => o.type === type);
+    if (!ov || !ov.edges.length) return;
+    const [col, row] = key.split(',').map(Number);
+    hexMap[key] = { col, row, edges: ov.edges.slice(), ov, terrain: hex.terrain };
+  });
+  if (!Object.keys(hexMap).length) return { runs: [], circles: [] };
+
+  function hasCont(key, eIdx) {
+    const { col, row } = hexMap[key];
+    const nb = _HEX_NEIGHBORS[Math.abs(row % 2)];
+    const [dc, dr] = nb[eIdx];
+    const nbKey = `${col+dc},${row+dr}`;
+    return !!(hexMap[nbKey] && hexMap[nbKey].edges.includes((eIdx + 3) % 6));
+  }
+
+  function getTrunk(key) {
+    const { edges, ov } = hexMap[key];
+    if (edges.length < 3) return null;
+    if (ov.trunkPair && edges.includes(ov.trunkPair[0]) && edges.includes(ov.trunkPair[1]))
+      return ov.trunkPair;
+    let best = null, bestScore = -1;
+    for (let i = 0; i < edges.length; i++) for (let j = i+1; j < edges.length; j++) {
+      const a = edges[i], b = edges[j];
+      const diff = Math.abs((b - a + 6) % 6);
+      const ang = diff > 3 ? 6 - diff : diff;
+      const score = ang + (hasCont(key,a)?0.5:0) + (hasCont(key,b)?0.5:0);
+      if (score > bestScore) { bestScore = score; best = [a, b]; }
+    }
+    return best;
+  }
+
+  const visited = new Set();
+  const runs = [];
+  const circles = [];
+
+  function walkRun(startKey, startEdge) {
+    const startVis = `${startKey}|${startEdge}`;
+    if (visited.has(startVis)) return;
+    const wps = [];
+    const { col: sc, row: sr } = hexMap[startKey];
+    const { x: scx, y: scy } = hexCenter(sc, sr);
+    const [sex, sey] = offsetEndpoint(scx, scy, startEdge, hexSize, type);
+    const startIsStub = !hasCont(startKey, startEdge);
+    wps.push({ x: sex, y: sey, hexKey: startKey, isCenter: false, edge: startEdge, isStub: startIsStub });
+    wps.push({ x: scx, y: scy, hexKey: startKey, isCenter: true });
+    visited.add(startVis);
+    let curKey = startKey, arrivedVia = startEdge;
+    for (let step = 0; step < 500; step++) {
+      const { col, row, edges } = hexMap[curKey];
+      let exitEdge;
+      if (edges.length >= 3) {
+        const trunk = getTrunk(curKey);
+        if (!trunk) break;
+        exitEdge = trunk[0] === arrivedVia ? trunk[1] : (trunk[1] === arrivedVia ? trunk[0] : null);
+        if (exitEdge === null) break;
+      } else if (edges.length === 2) {
+        exitEdge = edges.find(e => e !== arrivedVia);
+      } else { break; }
+      if (exitEdge === undefined) break;
+      const exitVis = `${curKey}|${exitEdge}`;
+      if (visited.has(exitVis)) break;
+      visited.add(exitVis);
+      const { x: cx, y: cy } = hexCenter(col, row);
+      const [ex, ey] = offsetEndpoint(cx, cy, exitEdge, hexSize, type);
+      const isExitStub = !hasCont(curKey, exitEdge);
+      wps.push({ x: ex, y: ey, hexKey: curKey, isCenter: false, edge: exitEdge, isStub: isExitStub });
+      if (isExitStub) break;
+      const nb = _HEX_NEIGHBORS[Math.abs(row % 2)];
+      const [dc, dr] = nb[exitEdge];
+      const nextKey = `${col+dc},${row+dr}`;
+      const mirrorEdge = (exitEdge + 3) % 6;
+      if (!hexMap[nextKey] || !hexMap[nextKey].edges.includes(mirrorEdge)) break;
+      visited.add(`${nextKey}|${mirrorEdge}`);
+      const { col: nc, row: nr } = hexMap[nextKey];
+      const { x: ncx, y: ncy } = hexCenter(nc, nr);
+      wps.push({ x: ncx, y: ncy, hexKey: nextKey, isCenter: true });
+      curKey = nextKey; arrivedVia = mirrorEdge;
+      if (hexMap[nextKey].edges.length >= 3) break;
+    }
+    if (wps.length >= 2) runs.push(wps);
+  }
+
+  Object.keys(hexMap).forEach(key => {
+    const { edges } = hexMap[key];
+    if (edges.length === 1) {
+      walkRun(key, edges[0]);
+    } else if (edges.length >= 3) {
+      const trunk = getTrunk(key);
+      if (trunk) {
+        [trunk[0], trunk[1]].forEach(e => walkRun(key, e));
+        edges.filter(e => !trunk.includes(e)).forEach(branchEdge => {
+          if (visited.has(`${key}|${branchEdge}`)) return;
+          visited.add(`${key}|${branchEdge}`);
+          const { col, row } = hexMap[key];
+          const { x: cx, y: cy } = hexCenter(col, row);
+          const [ex, ey] = offsetEndpoint(cx, cy, branchEdge, hexSize, type);
+          runs.push([
+            { x: cx, y: cy, hexKey: key, isCenter: true },
+            { x: ex, y: ey, hexKey: key, isCenter: false, edge: branchEdge, isStub: !hasCont(key, branchEdge) }
+          ]);
+        });
+      }
+    } else {
+      edges.forEach(e => walkRun(key, e));
+    }
+  });
+
+  // Endpoint circles at stubs not touching water terrain
+  runs.forEach(run => {
+    [run[0], run[run.length-1]].forEach(wp => {
+      if (wp.isStub) {
+        const hex = state.hexes[wp.hexKey];
+        if (!hex || hex.terrain !== 'water') circles.push({ x: wp.x, y: wp.y });
+      }
+    });
+  });
+  return { runs, circles };
+}
+
+function renderOverlayRuns(ctx, type, data) {
+  if (!data || !data.runs.length) return;
+  const roadSurf = (hexKey) => {
+    const h = state.hexes[hexKey];
+    const ov = h && h.overlays && h.overlays.find(o => o.type === 'road');
+    return ov ? (ov.surface || 'dirt') : 'dirt';
+  };
+  const typeColor = { river: '#5a87b8', route: '#a02828' };
+  const typeWidth = { river: 3, route: 2.5, road: 2 };
+  const circleColor = { river: '#3e6280', route: '#6b1b1b', road: '#5a4020' };
+  if (type === 'route') ctx.setLineDash([5, 4]); else ctx.setLineDash([]);
+  data.runs.forEach(run => {
+    if (run.length < 2) return;
+    // Pick color from first center waypoint
+    let color = typeColor[type];
+    if (type === 'road') {
+      const cWp = run.find(wp => wp.isCenter);
+      const surf = cWp ? roadSurf(cWp.hexKey) : 'dirt';
+      color = ({dirt:'#8b6f47',gravel:'#7a7066',stone:'#9c958a'}[surf] || '#8b6f47');
+    }
+    // Split at water-terrain centers, smooth each sub-path
+    const subPaths = [[]];
+    run.forEach(wp => {
+      const hex = wp.hexKey && state.hexes[wp.hexKey];
+      if (wp.isCenter && hex && hex.terrain === 'water') {
+        if (subPaths[subPaths.length-1].length) subPaths.push([]);
+      } else {
+        subPaths[subPaths.length-1].push({ x: wp.x, y: wp.y });
+      }
+    });
+    subPaths.forEach(sub => {
+      if (sub.length < 2) return;
+      const pts = catmullRomPts(sub);
+      ctx.strokeStyle = color; ctx.lineWidth = typeWidth[type] || 2;
+      ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.stroke();
+    });
+  });
+  ctx.setLineDash([]);
+  // Endpoint circles
+  data.circles.forEach(({ x, y }) => {
+    ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI*2);
+    ctx.fillStyle = circleColor[type] || '#444'; ctx.fill();
+  });
+}
+
+function buildAndRenderOverlays(ctx) {
+  if (_overlayCacheVersion !== _overlayCacheRenderedVersion) {
+    _overlayCache.rivers = buildNetworkRuns('river');
+    _overlayCache.roads  = buildNetworkRuns('road');
+    _overlayCache.routes = buildNetworkRuns('route');
+    _overlayCacheRenderedVersion = _overlayCacheVersion;
+  }
+  renderOverlayRuns(ctx, 'river', _overlayCache.rivers);
+  renderOverlayRuns(ctx, 'road',  _overlayCache.roads);
+  renderOverlayRuns(ctx, 'route', _overlayCache.routes);
 }
 
 function pxToHex(px, py) {
@@ -1698,35 +1917,7 @@ function drawWorldHex(c, r) {
     ctx.fillStyle = g; hexPath(); ctx.fill();
   }
 
-  if (hex.overlays && hex.overlays.length) {
-    // Z-order: rivers → roads → routes (roads visually bridge rivers)
-    const _hk = c + ',' + r;
-    ['river', 'road', 'route'].forEach(ovType => {
-      const ov = hex.overlays.find(o => o.type === ovType);
-      if (!ov || !ov.edges.length) return;
-      const oColor = ovType === 'river' ? '#5a87b8'
-        : ovType === 'route' ? '#a02828'
-        : ({dirt:'#8b6f47',gravel:'#7a7066',stone:'#9c958a'}[ov.surface] || '#8b6f47');
-      const oWidth = ovType === 'river' ? 3 : ovType === 'route' ? 2.5 : 2;
-      if (ovType === 'route') ctx.setLineDash([5, 4]); else ctx.setLineDash([]);
-      ov.edges.forEach(eIdx => drawSpokeBezier(ctx, x, y, eIdx, hexSize, ovType, oColor, oWidth, _hk));
-      ctx.setLineDash([]);
-      // Flow arrows for rivers — positioned at the offset endpoint
-      if (ovType === 'river' && ov.flowFrom !== null) {
-        ov.edges.forEach(eIdx => {
-          const [ex, ey] = offsetEndpoint(x, y, eIdx, hexSize, 'river');
-          const isSource = eIdx === ov.flowFrom;
-          const adx = isSource ? (x - ex) : (ex - x);
-          const ady = isSource ? (y - ey) : (ey - y);
-          _drawArrowhead(ctx, ex, ey, adx, ady, 6, oColor);
-        });
-      }
-    });
-  }
-  // Path-highlight gold fill for travel calculator (intermediate hexes only)
-  if (_rulerPathSet && _rulerPathSet.has(c + ',' + r)) {
-    hexPath(); ctx.fillStyle = 'rgba(240,192,64,0.2)'; ctx.fill();
-  }
+  // Overlays rendered as network splines by buildAndRenderOverlays() in drawWorld()
 
   hexPath();
   ctx.strokeStyle = isSel ? '#f0c040' : 'rgba(0,0,0,0.32)';
@@ -1819,6 +2010,20 @@ function drawWorld() {
     _rulerPathSet = new Set(_fp.slice(1, -1).map(h => h.col + ',' + h.row));
   } else { _rulerPathSet = null; }
   for (let r = rowMin; r <= rowMax; r++) for (let c = colMin; c <= colMax; c++) drawWorldHex(c, r);
+  buildAndRenderOverlays(ctx);
+  // Path-highlight (above overlays)
+  if (_rulerPathSet && _rulerPathSet.size) {
+    const { colMin: _cl, colMax: _cx, rowMin: _rl, rowMax: _rx, hexSize: _hs } = state.mapMeta;
+    for (let _r = _rl; _r <= _rx; _r++) for (let _c = _cl; _c <= _cx; _c++) {
+      if (_rulerPathSet.has(_c + ',' + _r)) {
+        const { x: _px, y: _py } = hexCenter(_c, _r);
+        const _pts = hexCorners(_px, _py, _hs - 1);
+        ctx.beginPath(); ctx.moveTo(_pts[0].x, _pts[0].y);
+        for (let i=1;i<6;i++) ctx.lineTo(_pts[i].x, _pts[i].y);
+        ctx.closePath(); ctx.fillStyle = 'rgba(240,192,64,0.2)'; ctx.fill();
+      }
+    }
+  }
   updateMapStatus();
 }
 
@@ -1866,8 +2071,8 @@ function setMapMode(mode) {
 
 function applyMapMode(c, r) {
   const hex = getHex(c, r);
-  if      (_mapCurMode === 'paint')    { hex.terrain = _mapCurTerrain; }
-  else if (_mapCurMode === 'erase')    { hex.terrain = 'unknown'; hex.note = ''; hex.explored = false; hex.name = ''; }
+  if      (_mapCurMode === 'paint')    { hex.terrain = _mapCurTerrain; _invalidateOverlayCache(); }
+  else if (_mapCurMode === 'erase')    { hex.terrain = 'unknown'; hex.note = ''; hex.explored = false; hex.name = ''; _invalidateOverlayCache(); }
   else if (_mapCurMode === 'explored') { if (hex.terrain === 'unknown') return; hex.explored = _mapExploreIntent; }
   else if (_mapCurMode === 'select')   { drawWorld(); renderMapInfo(c, r); return; }
   save();
@@ -1878,7 +2083,8 @@ function applyMapMode(c, r) {
 function _addOverlayEdgeRaw(hex, T, edgeIdx) {
   let ov = hex.overlays.find(o => o.type === T);
   if (!ov) {
-    ov = { type: T, edges: [], flowFrom: null };
+    ov = { type: T, edges: [], trunkPair: null };
+    if (T === 'river') ov.flowFromEdges = [];
     if (T === 'road') ov.surface = 'dirt';
     hex.overlays.push(ov);
   }
@@ -1889,6 +2095,7 @@ function _eraseOverlay(c, r) {
   const T = _mapCurMode === 'eraseRoad' ? 'road' : _mapCurMode === 'eraseRiver' ? 'river' : 'route';
   const hex = getHex(c, r);
   hex.overlays = hex.overlays.filter(o => o.type !== T);
+  _invalidateOverlayCache();
 }
 
 function applyOverlayPaint(c, r, px, py) {
@@ -1902,6 +2109,7 @@ function applyOverlayPaint(c, r, px, py) {
     if (d < bestD) { bestD = d; bestEdge = i; }
   }
   _addOverlayEdgeRaw(getHex(c, r), T, bestEdge);
+  _invalidateOverlayCache();
 }
 
 function updateMapStatus() {
@@ -2028,7 +2236,7 @@ function _renderOverlayEditor(c, r, hex) {
           <select style="background:var(--panel-dark);border:1px solid var(--border);color:var(--text);padding:2px 4px"
             onchange="setRiverFlowFrom(${c},${r},this.value)">
             <option value="">— none —</option>
-            ${riverOv.edges.map(i => `<option value="${i}" ${riverOv.flowFrom===i?'selected':''}>${_EDGE_LABELS[i]}</option>`).join('')}
+            ${riverOv.edges.map(i => `<option value="${i}" ${(riverOv.flowFromEdges||[]).includes(i)?'selected':''}>${_EDGE_LABELS[i]}</option>`).join('')}
           </select>
         </div>` : ''}
       </div>
@@ -2081,24 +2289,26 @@ function toggleOverlayEdge(c, r, T, eIdx, checked) {
     const ov = hex.overlays.find(o => o.type === T);
     if (ov) {
       ov.edges = ov.edges.filter(e => e !== eIdx);
-      if (ov.flowFrom === eIdx) ov.flowFrom = null;
+      if (ov.flowFromEdges) ov.flowFromEdges = ov.flowFromEdges.filter(e => e !== eIdx);
       if (ov.edges.length === 0) hex.overlays = hex.overlays.filter(o => o.type !== T);
     }
   }
-  save(); drawWorld(); renderMapInfo(c, r);
+  _invalidateOverlayCache(); save(); drawWorld(); renderMapInfo(c, r);
 }
 
 function setOverlaySurface(c, r, surface) {
   const hex = getHex(c, r);
   const ov = hex.overlays.find(o => o.type === 'road'); if (!ov) return;
-  ov.surface = surface; save(); drawWorld();
+  ov.surface = surface; _invalidateOverlayCache(); save(); drawWorld();
 }
 
 function setRiverFlowFrom(c, r, val) {
   const hex = getHex(c, r);
   const ov = hex.overlays.find(o => o.type === 'river'); if (!ov) return;
-  ov.flowFrom = val === '' ? null : parseInt(val);
-  save(); drawWorld();
+  if (!Array.isArray(ov.flowFromEdges)) ov.flowFromEdges = [];
+  if (val === '') ov.flowFromEdges = [];
+  else { const e = parseInt(val); if (!ov.flowFromEdges.includes(e)) ov.flowFromEdges = [e]; }
+  _invalidateOverlayCache(); save(); drawWorld();
 }
 
 function mapSaveNoteFlash() {
@@ -2239,7 +2449,7 @@ function markRouteOnMap() {
       _addOverlayEdgeRaw(getHex(fp[i+1].col, fp[i+1].row), 'route', (eL+3)%6);
     }
   }
-  save(); drawWorld();
+  _invalidateOverlayCache(); save(); drawWorld();
 }
 
 function renderRulerPanel() {
