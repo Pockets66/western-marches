@@ -2064,20 +2064,23 @@ function _renderNetworkType(ctx, type, graph, runs) {
     });
   });
 
-  // Flow arrows (rivers only) — one arrow per segment, at the segment midpoint
+  // Flow arrows (rivers only) — one per run terminal, exactly on the spline endpoint
   if (type === 'river') {
-    graph.edges.forEach(e => {
-      if (!e.segment || !e.segment.flow) return;
-      const ndA = graph.nodes.get(e.a), ndB = graph.nodes.get(e.b);
-      if (!ndA || !ndB) return;
-      if (isWaterTerrain(ndA.col, ndA.row) || isWaterTerrain(ndB.col, ndB.row)) return;
-      const wA = nodeWp(e.a), wB = nodeWp(e.b);
-      const mx = (wA.x + wB.x) / 2, my = (wA.y + wB.y) / 2;
-      // e.a = seg.from node, e.b = seg.to node (by buildOverlayGraph construction)
-      // fromTo = water flows a→b; toFrom = b→a
-      let dx = wB.x - wA.x, dy = wB.y - wA.y;
-      if (e.segment.flow === 'toFrom') { dx = -dx; dy = -dy; }
-      _drawArrowhead(ctx, mx, my, dx, dy, 6, '#2d5a85');
+    runs.forEach(run => {
+      if (run.length < 2) return;
+      [[run[0], run[1]], [run[run.length - 1], run[run.length - 2]]].forEach(([k, adjK]) => {
+        if (deg(k) !== 1) return;
+        const nd = graph.nodes.get(k);
+        if (isWaterTerrain(nd.col, nd.row)) return;
+        const ie = graph.edges.find(e => e.segment && (e.a === k || e.b === k));
+        if (!ie || !ie.segment.flow) return;
+        const wp = nodeWp(k), adjWp = nodeWp(adjK);
+        const kIsFrom = ie.a === k;
+        // isInflow: water arrives at this terminal (it is the downstream end)
+        const isInflow = (kIsFrom && ie.segment.flow === 'toFrom') || (!kIsFrom && ie.segment.flow === 'fromTo');
+        const dx = adjWp.x - wp.x, dy = adjWp.y - wp.y;
+        _drawArrowhead(ctx, wp.x, wp.y, isInflow ? dx : -dx, isInflow ? dy : -dy, 6, '#2d5a85');
+      });
     });
   }
 }
