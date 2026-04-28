@@ -68,6 +68,33 @@ v10 → v11:
   existing overlays remain valid with no data change.
 - Increment schemaVersion to 11.
 
+v11 → v12:
+- Migration `migrateToV12()`: for every hex overlay:
+  - Rivers: `flowFrom: number | null` → `flowFromEdges: [number]`. If `flowFrom` was a
+    number, `flowFromEdges = [flowFrom]`. If null, `flowFromEdges = []`. Delete `flowFrom`.
+    Log a console warning for rivers with 2+ edges and an empty `flowFromEdges` after
+    migration (audit hook for unset flow direction).
+  - Rivers / roads / routes: add `trunkPair: null` if the field is absent.
+  - Water overlays (`type: "water"`) are new in v12; no migration needed.
+- Increment schemaVersion to 12.
+
+v12 → v13 (slice 14.10 — segment model consolidation):
+- Migration `migrateToV13()`: for every hex overlay:
+  - Water: add `segments: []`, delete `edges`.
+  - River / road / route: build `segments` from legacy `edges`/`flowFromEdges` fields via
+    `legacyEdgesToSegments()`, then delete `edges`, `flowFromEdges`, `trunkPair`,
+    `originAtCenter`. If `segments` already present, leave it.
+  - `legacyEdgesToSegments` mapping: 1 edge → `{C↔edge}`; 2 edges (no centerOrigin) →
+    `{edgeA↔edgeB}` with flow derived from inflows; 3+ edges or centerOrigin → fan
+    `{C↔each}`.
+- This migration is belt-and-suspenders only — no real user data existed at v12.
+- Increment schemaVersion to 13.
+
+**Consolidation history (slice 14.10):** Replaced the edge-based overlay model (slices
+14–14.9 exploratory phase) with a segment-based model. Slice 14.9 (center-origin support)
+and slice 14.6 (map undo) are deferred to slice 14.11. The edge/flowFromEdges/trunkPair
+fields are removed entirely from the schema.
+
 Incoming data from partner files (one-time import, not automatic):
 - `wm_sessions_v1` → read players into `state.players`, read sessions into
   `state.sessions` (map the existing `planned`/`actual` fields, initialize
@@ -82,7 +109,7 @@ Import should be a deliberate user action, not automatic — see future slice.
 
 ```js
 state = {
-  schemaVersion: 11,
+  schemaVersion: 13,
   factions:    [Faction],
   npcs:        [NPC],
   rumors:      [Rumor],
@@ -395,45 +422,73 @@ Pins are NOT nested in hexes. Filter `state.pins` by `hexKey`.
 
 ### Overlay
 
-Edge indices: `0=E, 1=SE, 2=SW, 3=W, 4=NW, 5=NE` for pointy-top hexes
-(derived from the `hexCorner` angle formula `60*i - 30` degrees).
+Anchor points: `0=E, 1=SE, 2=SW, 3=W, 4=NW, 5=NE` (edge midpoints) plus `'C'`
+(hex center). Edge indices derived from `hexCorner` angle formula `60*i − 30` degrees.
 
 ```js
+// Segment (shared shape for river/road/route)
 {
-  type:     "river" | "road" | "route",
-  edges:    [number],           // 1–6 indices in [0..5], all meeting at hex center
-  flowFrom: number | null,      // edge index 0..5 (must be in `edges`); rivers only;
-                                //   null = no flow direction set; null for roads
-  surface:  "dirt" | "gravel" | "stone",  // roads only; default "dirt";
-                                          //   ignored / not stored on rivers
+  from: 'C' | 0 | 1 | 2 | 3 | 4 | 5,   // anchor — 'C' is center, integers are edge midpoints
+  to:   'C' | 0 | 1 | 2 | 3 | 4 | 5,   // anchor — must differ from `from`
+  flow: 'fromTo' | 'toFrom' | null       // rivers only; ignored on roads/routes
 }
+// Constraints: from !== to; no two segments in one overlay share the same {from,to} pair.
+
+// River
+{ type: "river", segments: [Segment] }
+
+// Road
+{ type: "road", surface: "dirt" | "gravel" | "stone", segments: [Segment] }
+
+// Route
+{ type: "route", segments: [Segment] }
+
+// Water
+{ type: "water", size: "pond" | "lake", segments: [] }  // segments always empty
 ```
 
-**Multi-edge semantics.** All edges meet at the hex center, forming a star:
-- 1 edge = stub (half-line from center)
-- 2 edges = pass-through or bend
-- 3 edges = Y-junction
-- Up to 6 edges = full cluster
+**Segment semantics.** A segment is a connection between any two of a hex's 7 anchor
+points. Multiple segments in one overlay are independent — they need not connect. This
+naturally expresses:
+- `{C, edge}` — stub spoke from center to an edge
+- `{edge1, edge2}` — smooth pass-through (no center waypoint → no center dip)
+- Multiple `{C, edgeN}` segments — junction at center (Y-shape, star)
+- Two disconnected `{edgeA, edgeB}` segments — parallel non-connecting roads
 
-**Flow semantics.** `flowFrom` is the edge through which water enters the hex.
-An arrowhead at that edge points INTO the hex; arrowheads at all other edges
-point OUT. If `flowFrom` is null, no arrows are drawn.
+**Flow semantics (rivers only).** `flow: 'fromTo'` means water flows from the `from`
+anchor to the `to` anchor. `flow: 'toFrom'` means the reverse. `flow: null` means no
+direction is set; no flow arrow at that segment's terminal. Flow arrows render only at
+network terminal nodes (degree-1 nodes with no cross-hex continuation).
 
-**Route overlays** are visually distinct (red dashed, `#a02828`) and ignore `flowFrom`
-and `surface`. Typically created via the travel calculator's "Mark route on map" button;
-can be removed via the Erase Routes toolbar mode. Routes do not grant the road speed
-bonus in travel time calculations (only `type === "road"` does).
+**Water overlays** are independent of terrain and of other overlay types. A hex may
+have at most one water overlay. Water overlays do not participate in the network
+graph. A hex can have a water overlay AND a river overlay simultaneously; river
+splines clip to the water bounding circle (pond: 25% apothem radius; lake: 50%).
 
-**Rendering (slice 14.7+).** Spokes are quadratic Bezier curves from hex center
-to a per-type offset point near the edge midpoint, not straight lines.
-Per-type tangent offsets (`OVERLAY_OFFSET`: river −3px, road +3px, route +6px)
-keep overlays visually separated on shared edges. Render order (bottom to top):
-terrain → rivers → roads → routes → path-highlight. Curve bow is small (0.18 of
-spoke length for rivers, 0.08 for roads/routes) and seeded deterministically per
-`(hexKey, edgeIdx, overlayType)` so redraws are identical. Bridge semantics:
-a hex with both a road and a river overlay is passable (road's ×1.0 modifier wins)
-regardless of underlying terrain — the road-first check in `modifierFor()` is
-intentional, not accidental.
+**Route overlays** are visually distinct (red dashed, `#a02828`). Created by the
+travel calculator's "Mark route on map"; removed via Erase Routes toolbar. Routes do
+not grant the road speed bonus in travel calculations (only `type === "road"` does).
+
+**Rendering (slice 14.10+).** Segments are assembled into a per-type graph. Connected
+runs are extracted (maximal paths from terminal/junction to terminal/junction) and
+rendered as centripetal Catmull-Rom splines (alpha=0.5, Barry-Goldman, parameterized
+by sqrt(distance)) through anchor offset positions. Consecutive duplicate waypoints
+are deduped before splining; interior C nodes with graph degree 2 are dropped at
+render time so accidental center dips render smooth. A 2-segment pass-through
+`{e1, e2}` (no center anchor) produces a smooth curve that never dips to the hex
+center. At junctions (degree-3+ nodes in the graph), the two
+most-opposite-tangent runs are merged into a continuous trunk spline; remaining runs
+peel off as branches. Per-type perpendicular offsets (river −3px, road +3px, route
++6px) keep overlays visually separated on shared edges. Render z-order: terrain →
+rivers → ponds → roads → lakes → routes → path-highlight. Lakes render on top of
+roads, visually blocking any road segment that passes through the hex center.
+`modifierFor()` mirrors this: a lake + center-touching road segment gets lake terrain
+rules, not road bonus.
+
+**Lake-blocks-roads rule.** A hex with a lake overlay AND road segments that have
+`'C'` as an endpoint: road bonus suppressed (lake blocks the road). A hex with a lake
+AND only edge-to-edge road segments (no center): road bonus applies (road goes around).
+Ponds never block roads.
 
 **Cascade.** Overlays are leaves attached to hexes — no other entity references
 them. Clearing a hex's terrain does NOT clear its overlays (roads and rivers are

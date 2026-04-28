@@ -4,12 +4,13 @@ A single-page web app for running a Western Marches style tabletop RPG campaign.
 Combines a hex-based world map with a faction/NPC/rumor tracker, with data linked across both.
 
 ## Current state
-This project is merging two existing standalone HTML tools:
-- `reference/faction-tracker.html` — factions, NPCs, rumors, faction-relations matrix
-- `reference/hexmap.html` — hex world map, per-hex local maps with pins
-
-These reference files are READ-ONLY. Do not modify them. The merged app lives in
-`index.html` at the project root (create it when needed).
++ The app lives in `index.html` at the project root. It originated as a merge of two
++ standalone HTML tools (`reference/faction-tracker.html`, `reference/hexmap.html`)
++ but has grown well beyond them. Those reference files are kept READ-ONLY as
++ historical context — do not modify them.
++
++ Schema is at v8 (see data-model.md). Tabs: Map, Factions, Quests (stub),
++ Sessions, Rumors, NPCs, Players.
 
 ## Entities (see docs/data-model.md for full schema)
 Factions, NPCs, Rumors, Quests, Events, Players, Sessions, Hexes, Pins, Relations.
@@ -44,7 +45,6 @@ in the same commit.
 - Undo/redo beyond what git provides
 
 ## Planned future features (don't build yet, but don't preclude)
-- NPC detail page with GURPS stats, traits, profession, appearance
+- GURPS stats / traits / profession on NPCs (mirroring the PC character-sheet tiers)
 - NPC-to-NPC relationships (separate from faction relations)
 - PC-to-NPC relationships (PCs may become a separate top-level collection)
-- Designs that hardcode NPCs as "just a name + role" will need to be revisited

@@ -1,4 +1,4 @@
-# Roadmap (as of slice 14.7 complete)
+# Roadmap (as of slice 14.10 complete)
 
 ## Done
 - Slice 1: Shell + state layer + CSS foundation
@@ -17,6 +17,13 @@
 - Slice 14: Map overlays — rivers and roads (schema v10)
 - Slice 14.5: Travel time calculator + route overlays (schema v11)
 - Slice 14.7: Smooth overlay rendering + Bezier curves + bridge semantics
+- Slice 14.8: Network-smoothed Catmull-Rom rendering + water overlays + multi-source rivers + trunk overrides (schema v12)
+- Slice 14.9: Dropped — center-origin support subsumed by slice 14.10 segment model
+- Slice 14.10: Segment-based overlay model consolidation (schema v13) — smooth turns, parallel roads, segment editor, sync flow, lake-blocks-roads
+- Slice 14.10.1: Overlay rendering fixes — ponds no longer erase rivers, centripetal Catmull-Rom, no center-snapping on drag, per-segment flow arrows
+
+## Deferred
+- Slice 14.6 → rescheduled as Slice 14.11: Map undo system (building on segment model)
 
 ## In progress
 
