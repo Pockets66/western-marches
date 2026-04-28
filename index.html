@@ -1674,6 +1674,18 @@ function offsetEndpoint(cx, cy, eIdx, hexSize, type) {
   return [m.x + v.x * off, m.y + v.y * off];
 }
 
+function _clipToWaterOverlay(col, row, ex, ey, hexSize) {
+  const hex = state.hexes[`${col},${row}`];
+  const waterOv = (hex?.overlays || []).find(o => o.type === 'water');
+  if (!waterOv) return [ex, ey];
+  const apothem = hexSize * Math.sqrt(3) / 2;
+  const R = waterOv.size === 'lake' ? apothem * 0.5 : apothem * 0.25;
+  const { x: cx, y: cy } = hexCenter(col, row);
+  const dx = ex - cx, dy = ey - cy;
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-9) return [ex, ey];
+  return [cx + dx / len * R, cy + dy / len * R];
+}
 
 // ── Overlay network rendering ────────────────────────────────────────────────
 
@@ -1752,7 +1764,8 @@ function buildNetworkRuns(type) {
     const wps = [];
     const { col: sc, row: sr } = hexMap[startKey];
     const { x: scx, y: scy } = hexCenter(sc, sr);
-    const [sex, sey] = offsetEndpoint(scx, scy, startEdge, hexSize, type);
+    const [_sex, _sey] = offsetEndpoint(scx, scy, startEdge, hexSize, type);
+    const [sex, sey] = _clipToWaterOverlay(sc, sr, _sex, _sey, hexSize);
     const startIsStub = !hasCont(startKey, startEdge);
     wps.push({ x: sex, y: sey, hexKey: startKey, isCenter: false, edge: startEdge, isStub: startIsStub });
     wps.push({ x: scx, y: scy, hexKey: startKey, isCenter: true });
@@ -1774,7 +1787,8 @@ function buildNetworkRuns(type) {
       if (visited.has(exitVis)) break;
       visited.add(exitVis);
       const { x: cx, y: cy } = hexCenter(col, row);
-      const [ex, ey] = offsetEndpoint(cx, cy, exitEdge, hexSize, type);
+      const [_ex, _ey] = offsetEndpoint(cx, cy, exitEdge, hexSize, type);
+      const [ex, ey] = _clipToWaterOverlay(col, row, _ex, _ey, hexSize);
       const isExitStub = !hasCont(curKey, exitEdge);
       wps.push({ x: ex, y: ey, hexKey: curKey, isCenter: false, edge: exitEdge, isStub: isExitStub });
       if (isExitStub) break;
@@ -1806,10 +1820,11 @@ function buildNetworkRuns(type) {
           visited.add(`${key}|${branchEdge}`);
           const { col, row } = hexMap[key];
           const { x: cx, y: cy } = hexCenter(col, row);
-          const [ex, ey] = offsetEndpoint(cx, cy, branchEdge, hexSize, type);
+          const [_bex, _bey] = offsetEndpoint(cx, cy, branchEdge, hexSize, type);
+          const [bex, bey] = _clipToWaterOverlay(col, row, _bex, _bey, hexSize);
           runs.push([
             { x: cx, y: cy, hexKey: key, isCenter: true },
-            { x: ex, y: ey, hexKey: key, isCenter: false, edge: branchEdge, isStub: !hasCont(key, branchEdge) }
+            { x: bex, y: bey, hexKey: key, isCenter: false, edge: branchEdge, isStub: !hasCont(key, branchEdge) }
           ]);
         });
       }
@@ -1818,12 +1833,13 @@ function buildNetworkRuns(type) {
     }
   });
 
-  // Endpoint circles at stubs not touching water terrain
+  // Endpoint circles at stubs — suppress for water terrain or water overlay hexes
   runs.forEach(run => {
     [run[0], run[run.length-1]].forEach(wp => {
       if (wp.isStub) {
         const hex = state.hexes[wp.hexKey];
-        if (!hex || hex.terrain !== 'water') circles.push({ x: wp.x, y: wp.y });
+        if (hex && hex.terrain !== 'water' && !(hex.overlays||[]).some(o => o.type === 'water'))
+          circles.push({ x: wp.x, y: wp.y });
       }
     });
   });
@@ -1854,7 +1870,7 @@ function renderOverlayRuns(ctx, type, data) {
     const subPaths = [[]];
     run.forEach(wp => {
       const hex = wp.hexKey && state.hexes[wp.hexKey];
-      if (wp.isCenter && hex && hex.terrain === 'water') {
+      if (wp.isCenter && hex && (hex.terrain === 'water' || (hex.overlays||[]).some(o => o.type === 'water'))) {
         if (subPaths[subPaths.length-1].length) subPaths.push([]);
       } else {
         subPaths[subPaths.length-1].push({ x: wp.x, y: wp.y });
@@ -1875,6 +1891,30 @@ function renderOverlayRuns(ctx, type, data) {
     ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI*2);
     ctx.fillStyle = circleColor[type] || '#444'; ctx.fill();
   });
+  // Flow arrows (rivers only — at terminal stubs, along spline tangent)
+  if (type === 'river') {
+    data.runs.forEach(run => {
+      if (run.length < 2) return;
+      [
+        { wp: run[0],            adj: run[1] },
+        { wp: run[run.length-1], adj: run[run.length-2] }
+      ].forEach(({ wp, adj }) => {
+        if (wp.isCenter || !wp.isStub || wp.edge === undefined) return;
+        const hex = state.hexes[wp.hexKey];
+        if (!hex || hex.terrain === 'water' || (hex.overlays||[]).some(o => o.type === 'water')) return;
+        const ov = (hex.overlays||[]).find(o => o.type === 'river');
+        if (!ov) return;
+        // Catmull-Rom tangent at terminal = (adj - wp) for start, (wp - adj') for end
+        // With phantom endpoint, T at run[0] = adj - wp exactly.
+        // For inflow: arrow tip at edge, points INWARD (toward adj)
+        // For outflow: arrow tip at edge, points OUTWARD (away from adj)
+        const isInflow = (ov.flowFromEdges||[]).includes(wp.edge);
+        const dx = isInflow ? adj.x - wp.x : wp.x - adj.x;
+        const dy = isInflow ? adj.y - wp.y : wp.y - adj.y;
+        _drawArrowhead(ctx, wp.x, wp.y, dx, dy, 6, '#2d5a85');
+      });
+    });
+  }
 }
 
 function buildAndRenderOverlays(ctx) {
@@ -1884,9 +1924,51 @@ function buildAndRenderOverlays(ctx) {
     _overlayCache.routes = buildNetworkRuns('route');
     _overlayCacheRenderedVersion = _overlayCacheVersion;
   }
+  renderWaterOverlays(ctx);
   renderOverlayRuns(ctx, 'river', _overlayCache.rivers);
   renderOverlayRuns(ctx, 'road',  _overlayCache.roads);
   renderOverlayRuns(ctx, 'route', _overlayCache.routes);
+}
+
+function renderWaterOverlays(ctx) {
+  const { hexSize } = state.mapMeta;
+  const apothem = hexSize * Math.sqrt(3) / 2;
+  Object.entries(state.hexes).forEach(([key, hex]) => {
+    const waterOv = (hex.overlays || []).find(o => o.type === 'water');
+    if (!waterOv) return;
+    const [col, row] = key.split(',').map(Number);
+    const { x: cx, y: cy } = hexCenter(col, row);
+    ctx.fillStyle = '#5a87b8';
+    ctx.strokeStyle = '#3e6280';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([]);
+    if (waterOv.size === 'pond') {
+      const R = apothem * 0.25;
+      ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+    } else {
+      const baseR = apothem * 0.5;
+      const h = hashString(key + ':lake');
+      const n = 8;
+      const pts = [];
+      for (let i = 0; i < n; i++) {
+        const nibble = (h >>> (i * 4)) & 0xf;
+        const R = baseR * (1 + 0.15 * (nibble / 15 * 2 - 1));
+        const angle = (Math.PI * 2 * i) / n - Math.PI / 2;
+        pts.push({ x: cx + R * Math.cos(angle), y: cy + R * Math.sin(angle) });
+      }
+      ctx.beginPath();
+      const first = { x: (pts[0].x + pts[n - 1].x) / 2, y: (pts[0].y + pts[n - 1].y) / 2 };
+      ctx.moveTo(first.x, first.y);
+      for (let i = 0; i < n; i++) {
+        const next = pts[(i + 1) % n];
+        const mid = { x: (pts[i].x + next.x) / 2, y: (pts[i].y + next.y) / 2 };
+        ctx.quadraticCurveTo(pts[i].x, pts[i].y, mid.x, mid.y);
+      }
+      ctx.closePath();
+      ctx.fill(); ctx.stroke();
+    }
+  });
 }
 
 function pxToHex(px, py) {
@@ -2288,15 +2370,37 @@ function _initMapEvents() {
 
 // ── Map — info panel ─────────────────────────────────────────────────────────
 
+function _mkTrunkDropdown(c, r, T, ov) {
+  if (!ov || ov.edges.length < 3 || ov.edges.length > 4) return '';
+  const edges = ov.edges.slice().sort((a,b) => a-b);
+  const pairs = [];
+  for (let i = 0; i < edges.length; i++)
+    for (let j = i+1; j < edges.length; j++)
+      pairs.push([edges[i], edges[j]]);
+  const curValid = ov.trunkPair && ov.edges.includes(ov.trunkPair[0]) && ov.edges.includes(ov.trunkPair[1]);
+  const sortedPair = curValid ? [ov.trunkPair[0], ov.trunkPair[1]].sort((a,b)=>a-b) : null;
+  const curVal = sortedPair ? sortedPair[0] + ',' + sortedPair[1] : '';
+  return `<div style="display:flex;gap:6px;align-items:center;font-size:0.8rem">
+    <span style="color:var(--text-dim)">Trunk pair:</span>
+    <select style="background:var(--panel-dark);border:1px solid var(--border);color:var(--text);padding:2px 4px"
+      onchange="setOverlayTrunkPair(${c},${r},'${T}',this.value)">
+      <option value="">(auto)</option>
+      ${pairs.map(([a,b]) => `<option value="${a},${b}" ${curVal===a+','+b?'selected':''}>${_EDGE_LABELS[a]}&#x2194;${_EDGE_LABELS[b]}</option>`).join('')}
+    </select>
+  </div>`;
+}
+
 function _renderOverlayEditor(c, r, hex) {
   const roadOv  = hex.overlays.find(o => o.type === 'road');
   const riverOv = hex.overlays.find(o => o.type === 'river');
+  const waterOv = hex.overlays.find(o => o.type === 'water');
   const mkCbs = (T, ov) => _EDGE_LABELS.map((lbl, i) =>
     `<label style="display:flex;align-items:center;gap:3px;font-size:0.8rem;cursor:pointer">
       <input type="checkbox" ${ov && ov.edges.includes(i) ? 'checked' : ''}
         onchange="toggleOverlayEdge(${c},${r},'${T}',${i},this.checked)"> ${lbl}
     </label>`
   ).join('');
+  const waterCur = waterOv ? waterOv.size : '';
   return `
     <div style="border-top:1px solid var(--border);padding-top:10px;display:flex;flex-direction:column;gap:8px">
       <div class="map-info-lbl">Overlays</div>
@@ -2312,20 +2416,33 @@ function _renderOverlayEditor(c, r, hex) {
               <span style="text-transform:capitalize">${s}</span>
             </label>`
           ).join('')}
-        </div>` : ''}
+        </div>
+        ${_mkTrunkDropdown(c, r, 'road', roadOv)}` : ''}
       </div>
       <div class="map-overlay-group">
         <div class="map-overlay-head">River</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">${mkCbs('river', riverOv)}</div>
         ${riverOv && riverOv.edges.length > 0 ? `
-        <div style="display:flex;gap:6px;align-items:center;font-size:0.8rem">
-          <span style="color:var(--text-dim)">Flow from:</span>
-          <select style="background:var(--panel-dark);border:1px solid var(--border);color:var(--text);padding:2px 4px"
-            onchange="setRiverFlowFrom(${c},${r},this.value)">
-            <option value="">— none —</option>
-            ${riverOv.edges.map(i => `<option value="${i}" ${(riverOv.flowFromEdges||[]).includes(i)?'selected':''}>${_EDGE_LABELS[i]}</option>`).join('')}
-          </select>
-        </div>` : ''}
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:0.8rem">
+          <span style="color:var(--text-dim)">Inflow:</span>
+          ${riverOv.edges.map(i => `<label style="display:flex;align-items:center;gap:3px;cursor:pointer">
+            <input type="checkbox" ${(riverOv.flowFromEdges||[]).includes(i)?'checked':''}
+              onchange="toggleRiverInflow(${c},${r},${i},this.checked)"> ${_EDGE_LABELS[i]}
+          </label>`).join('')}
+        </div>
+        ${_mkTrunkDropdown(c, r, 'river', riverOv)}` : ''}
+      </div>
+      <div class="map-overlay-group">
+        <div class="map-overlay-head">Water Feature</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:0.8rem">
+          ${[['','(none)'],['pond','Pond'],['lake','Lake']].map(([val,lbl]) =>
+            `<label style="display:flex;align-items:center;gap:3px;cursor:pointer">
+              <input type="radio" name="water-${c}x${r}" value="${val}"
+                ${waterCur===val?'checked':''} onchange="setWaterOverlay(${c},${r},'${val}')">
+              ${lbl}
+            </label>`
+          ).join('')}
+        </div>
       </div>
     </div>`;
 }
@@ -2395,6 +2512,31 @@ function setRiverFlowFrom(c, r, val) {
   if (!Array.isArray(ov.flowFromEdges)) ov.flowFromEdges = [];
   if (val === '') ov.flowFromEdges = [];
   else { const e = parseInt(val); if (!ov.flowFromEdges.includes(e)) ov.flowFromEdges = [e]; }
+  _invalidateOverlayCache(); save(); drawWorld();
+}
+
+function toggleRiverInflow(c, r, edgeIdx, checked) {
+  const hex = getHex(c, r);
+  const ov = hex.overlays.find(o => o.type === 'river'); if (!ov) return;
+  if (!Array.isArray(ov.flowFromEdges)) ov.flowFromEdges = [];
+  if (checked) { if (!ov.flowFromEdges.includes(edgeIdx)) ov.flowFromEdges.push(edgeIdx); }
+  else { ov.flowFromEdges = ov.flowFromEdges.filter(e => e !== edgeIdx); }
+  _invalidateOverlayCache(); save(); drawWorld();
+}
+
+function setOverlayTrunkPair(c, r, type, val) {
+  const hex = getHex(c, r);
+  const ov = hex.overlays.find(o => o.type === type); if (!ov) return;
+  if (!val) { ov.trunkPair = null; }
+  else { const [a, b] = val.split(',').map(Number); ov.trunkPair = [a, b]; }
+  _invalidateOverlayCache(); save(); drawWorld();
+}
+
+function setWaterOverlay(c, r, size) {
+  const hex = getHex(c, r);
+  if (!Array.isArray(hex.overlays)) hex.overlays = [];
+  hex.overlays = hex.overlays.filter(o => o.type !== 'water');
+  if (size) hex.overlays.push({ type: 'water', size, edges: [] });
   _invalidateOverlayCache(); save(); drawWorld();
 }
 
