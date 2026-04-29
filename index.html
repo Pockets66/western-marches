@@ -1785,6 +1785,7 @@ const _EDGE_LABELS = ['E','SE','SW','W','NW','NE']; // matches edgeMidpoint conv
 
 let _mapCurTerrain    = 'plains';
 let _mapCurMode       = 'select';
+let _mapRoadSurface   = 'dirt';
 let _mapIsDrag        = false;
 let _mapExploreIntent = true;
 let _mapSelHex     = null;
@@ -2216,7 +2217,7 @@ function _renderNetworkType(ctx, type, graph, runs) {
   const baseColor   = { river: '#5a87b8', route: '#a02828' };
   const circleColors = { river: '#3e6280', route: '#6b1b1b', road: '#5a4020' };
   const typeWidth   = { river: 3, route: 2.5, road: 2 };
-  const roadColors  = { dirt: '#8b6f47', gravel: '#7a7066', stone: '#9c958a' };
+  const roadColors  = { dirt: '#c4a07a', gravel: '#5c3d1e', stone: '#909090' };
 
   function waterOvOf(col, row) {
     const h = state.hexes[`${col},${row}`];
@@ -2293,27 +2294,48 @@ function _renderNetworkType(ctx, type, graph, runs) {
       acc.push(wp);
       return acc;
     }, []);
-    let color = baseColor[type];
-    if (type === 'road') {
-      const ep = wps.find(wp => wp.anchor !== 'C');
-      if (ep) {
-        const h = state.hexes[`${ep.col},${ep.row}`];
-        const ov = h && (h.overlays || []).find(o => o.type === 'road');
-        color = roadColors[ov ? ov.surface : 'dirt'] || '#8b6f47';
-      } else { color = '#8b6f47'; }
-    }
-    // Split at water-terrain center nodes
-    const subPaths = [[]];
+    const color = baseColor[type];
+    // Split at water-terrain center nodes; keep full wp objects for road surface lookup
+    const subWps = [[]];
     wps.forEach(wp => {
       if (wp.anchor === 'C' && isWaterTerrain(wp.col, wp.row)) {
-        if (subPaths[subPaths.length - 1].length) subPaths.push([]);
+        if (subWps[subWps.length - 1].length) subWps.push([]);
       } else {
-        subPaths[subPaths.length - 1].push({ x: wp.x, y: wp.y });
+        subWps[subWps.length - 1].push(wp);
       }
     });
-    subPaths.forEach(sub => {
+    subWps.forEach(sub => {
       if (sub.length < 2) return;
       const pts = catmullRomPts(sub);
+      if (type === 'road') {
+        // Per-interval surface: midpoint of each waypoint interval → pxToHex → road overlay surface
+        const _haloMap = { dirt: '#e8d484', gravel: '#e8d484', stone: '#e8d484' };
+        const _nS = 8;
+        const _ivs = sub.slice(0, -1).map((w0, wi) => {
+          const w1 = sub[wi + 1];
+          const _ph = pxToHex((w0.x + w1.x) * 0.5, (w0.y + w1.y) * 0.5);
+          const _hd = _ph && state.hexes[`${_ph.col},${_ph.row}`];
+          const _ov = _hd && (_hd.overlays || []).find(o => o.type === 'road');
+          const _sf = (_ov && _ov.surface) || 'dirt';
+          return { s: wi * _nS, e: Math.min((wi + 1) * _nS, pts.length - 1),
+                   c: roadColors[_sf] || '#c4a07a', h: _haloMap[_sf] || '#f5e8c8' };
+        });
+        ctx.lineWidth = typeWidth.road + 2;
+        _ivs.forEach(iv => {
+          ctx.strokeStyle = iv.h;
+          ctx.beginPath(); ctx.moveTo(pts[iv.s].x, pts[iv.s].y);
+          for (let k = iv.s + 1; k <= iv.e; k++) ctx.lineTo(pts[k].x, pts[k].y);
+          ctx.stroke();
+        });
+        ctx.lineWidth = typeWidth.road;
+        _ivs.forEach(iv => {
+          ctx.strokeStyle = iv.c;
+          ctx.beginPath(); ctx.moveTo(pts[iv.s].x, pts[iv.s].y);
+          for (let k = iv.s + 1; k <= iv.e; k++) ctx.lineTo(pts[k].x, pts[k].y);
+          ctx.stroke();
+        });
+        return;
+      }
       ctx.strokeStyle = color;
       ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
       for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
@@ -2527,35 +2549,7 @@ function drawWorldHex(c, r) {
     ctx.strokeStyle = '#000'; ctx.lineWidth = 0.5; ctx.stroke();
   }
 
-  if (hex.name && hex.name.trim()) {
-    const nm = hex.name.trim();
-    const words = nm.split(/\s+/);
-    const maxW = Math.sqrt(3) * hexSize * 0.89;
-    const baseFs = hexSize * 0.52, minFs = hexSize * 0.24;
-    ctx.save();
-    hexPath(); ctx.clip();
-    ctx.fillStyle = hex.terrain === 'unknown' ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.85)';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.letterSpacing = '-0.005em';
-    // Reduce font only until the longest word fits — no word splitting
-    let fs = baseFs;
-    ctx.font = 'bold italic ' + fs + 'px Crimson Pro,serif';
-    while (fs > minFs && words.some(w => ctx.measureText(w).width > maxW)) {
-      fs -= 0.5; ctx.font = 'bold italic ' + fs + 'px Crimson Pro,serif';
-    }
-    // Greedy word-wrap at chosen font size
-    const lines = [];
-    let cur = '';
-    for (const w of words) {
-      const test = cur ? cur + ' ' + w : w;
-      if (ctx.measureText(test).width <= maxW) { cur = test; }
-      else { if (cur) lines.push(cur); cur = w; }
-    }
-    if (cur) lines.push(cur);
-    const lh = fs * 1.2;
-    lines.forEach((l, i) => ctx.fillText(l, x, y + (i - (lines.length - 1) / 2) * lh));
-    ctx.restore();
-  }
+  // Hex names drawn in a separate pass (_drawAllHexNames) above overlays
 
   if (hex.explored) {
     hexPath(); ctx.strokeStyle = 'rgba(240,192,64,0.28)'; ctx.lineWidth = 1.5; ctx.stroke();
@@ -2571,6 +2565,46 @@ function drawWorldHex(c, r) {
   const _rk = c + ',' + r;
   if (state.ui.rulerHexA === _rk || state.ui.rulerHexB === _rk) {
     hexPath(); ctx.strokeStyle = '#f0c040'; ctx.lineWidth = 3; ctx.setLineDash([]); ctx.stroke();
+  }
+}
+
+function _drawAllHexNames(ctx) {
+  const { hexSize, colMin, colMax, rowMin, rowMax } = state.mapMeta;
+  for (let r = rowMin; r <= rowMax; r++) {
+    for (let c = colMin; c <= colMax; c++) {
+      const hex = getHex(c, r);
+      if (!hex.name || !hex.name.trim()) continue;
+      const { x, y } = hexCenter(c, r);
+      const nm = hex.name.trim();
+      const words = nm.split(/\s+/);
+      const maxW = Math.sqrt(3) * hexSize * 0.89;
+      const baseFs = hexSize * 0.52, minFs = hexSize * 0.24;
+      ctx.save();
+      const hpts = hexCorners(x, y, hexSize - 1);
+      ctx.beginPath(); ctx.moveTo(hpts[0].x, hpts[0].y);
+      for (let i = 1; i < 6; i++) ctx.lineTo(hpts[i].x, hpts[i].y);
+      ctx.closePath(); ctx.clip();
+      ctx.fillStyle = hex.terrain === 'unknown' ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.92)';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.letterSpacing = '-0.005em';
+      let fs = baseFs;
+      ctx.font = 'bold italic ' + fs + 'px Crimson Pro,serif';
+      while (fs > minFs && words.some(w => ctx.measureText(w).width > maxW)) {
+        fs -= 0.5; ctx.font = 'bold italic ' + fs + 'px Crimson Pro,serif';
+      }
+      const lines = [];
+      let cur = '';
+      for (const w of words) {
+        const test = cur ? cur + ' ' + w : w;
+        if (ctx.measureText(test).width <= maxW) { cur = test; }
+        else { if (cur) lines.push(cur); cur = w; }
+      }
+      if (cur) lines.push(cur);
+      const lh = fs * 1.2;
+      ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.lineWidth = 3; ctx.lineJoin = 'round';
+      lines.forEach((l, i) => { const ty = y + (i - (lines.length - 1) / 2) * lh; ctx.strokeText(l, x, ty); ctx.fillText(l, x, ty); });
+      ctx.restore();
+    }
   }
 }
 
@@ -2611,15 +2645,14 @@ function drawWorld() {
       }
     }
   }
+  _drawAllHexNames(ctx);
   _renderWorldPins(ctx);
   updateMapStatus();
 }
 
 function _pinDotPositions(cx, cy, n, hexSize) {
   if (n === 0) return [];
-  if (n === 1) return [{ x: cx, y: cy }];
-  if (n === 2) return [{ x: cx - hexSize * 0.14, y: cy }, { x: cx + hexSize * 0.14, y: cy }];
-  const spread = hexSize * 0.25;
+  const spread = hexSize * 0.62;
   return Array.from({ length: n }, (_, i) => {
     const angle = (i / n) * Math.PI * 2 - Math.PI / 2;
     return { x: cx + Math.cos(angle) * spread, y: cy + Math.sin(angle) * spread };
@@ -2689,8 +2722,12 @@ function _buildMapToolbar() {
     .map(([m,l,tip]) => `<button class="map-tool-btn${_mapCurMode===m?' active':''}" data-mode="${m}"
         onclick="setMapMode('${m}')"${tip?` title="${tip}"`:''}>${l}</button>`).join('');
   const sep = `<div style="width:1px;height:18px;background:var(--border);margin:0 2px;flex-shrink:0"></div>`;
+  const roadSurfacePicker = _mapCurMode === 'paintRoad' ? sep + ['dirt','gravel','stone'].map(s =>
+    `<button class="map-tool-btn${_mapRoadSurface===s?' active':''}" onclick="setMapRoadSurface('${s}')"
+      title="${s[0].toUpperCase()+s.slice(1)} road">${s[0].toUpperCase()+s.slice(1)}</button>`
+  ).join('') : '';
   tb.innerHTML = `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-    ${swatches}${sep}${tools}${sep}${overlayTools}${sep}
+    ${swatches}${sep}${tools}${sep}${overlayTools}${roadSurfacePicker}${sep}
     <button class="map-tool-btn${_mapCurMode === 'rulerA' || _mapCurMode === 'rulerB' ? ' active' : ''}" onclick="toggleRulerMode()">🧮 Travel</button>${sep}
     <button class="map-action-btn" onclick="openMapSettings()">Resize Map</button>
     <button class="map-action-btn" onclick="exportMap()">Export</button>
@@ -2708,11 +2745,18 @@ function setMapTerrain(t) {
 }
 
 function setMapMode(mode) {
+  const prev = _mapCurMode;
   _mapCurMode = mode;
-  document.querySelectorAll('.map-tool-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  if ((prev === 'paintRoad') !== (mode === 'paintRoad')) _buildMapToolbar();
+  else document.querySelectorAll('.map-tool-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
   const _cv = _mapCanvas();
   if (_cv) _cv.style.cursor = /^(paint|erase|explored|paintRoad|paintRiver|eraseRoad|eraseRiver|eraseRoute|rulerA|rulerB)$/.test(mode) ? 'crosshair' : 'default';
   updateMapStatus();
+}
+
+function setMapRoadSurface(s) {
+  _mapRoadSurface = s;
+  _buildMapToolbar();
 }
 
 function applyMapMode(c, r) {
@@ -2766,7 +2810,7 @@ function _addOverlaySegment(hex, type, from, to, flow) {
   let ov = hex.overlays.find(o => o.type === type);
   if (!ov) {
     ov = { type, segments: [] };
-    if (type === 'road') ov.surface = 'dirt';
+    if (type === 'road') ov.surface = _mapRoadSurface || 'dirt';
     hex.overlays.push(ov);
   }
   if (!Array.isArray(ov.segments)) ov.segments = [];
@@ -2965,6 +3009,12 @@ function _initMapEvents() {
   }
   canvas.addEventListener('mouseup',    () => { _finishOverlayDrag(true); });
   canvas.addEventListener('mouseleave', () => { _finishOverlayDrag(false); _mapHoverHex = null; updateMapStatus(); });
+  canvas.addEventListener('dblclick', e => {
+    if (_isOverlayMode() || _mapCurMode === 'rulerA' || _mapCurMode === 'rulerB') return;
+    const { x, y } = cxy(e);
+    const h = pxToHex(x, y);
+    if (h) openLocalMap(h.col, h.row);
+  });
 }
 
 // ── Map — pin CRUD ────────────────────────────────────────────────────────────

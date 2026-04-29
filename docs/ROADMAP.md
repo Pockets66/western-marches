@@ -25,25 +25,23 @@
 - Slice 15: Local maps + pins (schema v14) — pin CRUD, world-map dots, local map modal, image upload, drag/edit, cascades
 - Slice 16: Quests tab — Active/Archive sub-tabs, status/urgency, all field editors, event history readout; cross-link UI pending slice 18
 - Slice 17: Cross-link pass 1 (pin ↔ faction, pin ↔ NPCs)
+- Slice 18: Cross-link pass 2 (rumor ↔ pin/hex, NPC ↔ pin, session autocomplete)
 
 ## Deferred
 
 ## In progress
-- Slice 18: Cross-link pass 2 (rumor ↔ pin/hex, NPC ↔ pin, session autocomplete)
+- Slice 19: Map fixes
 
 ## Planned
-- Slice 19: Map fixes
-- Slice 20: Character sheet Tier 2 (structured advantages/disadvantages/skills)
-- Slice 21: Character sheet Tier 3 (combat, equipment, defenses)
+- Slice 20: Pathfinder overhaul with updated route calculator, editor and drawing tool
+- Slice 21: Character sheet Tier 2 (structured advantages/disadvantages/skills)
+- Slice 22: Character sheet Tier 3 (combat, equipment, defenses)
 
 ## Deferred / may skip
 - Spells sub-tab on character sheets (Tier 4, unmentioned so far)
 
 ## Planned Patches / Features
 - "Deceased" toggle for NPCs and players + Dead Character Archive ("Graveyard")
-- Recolour Hex Title fonts for better visibility
-- Recolour roads for better visibility (add yellow border)
-- Double-click hex opens local map
 - Draw/Edit travel route
 - Routes crossing a river add appropriate travel time (each crossing = +0.25 days of travel IF no bridge)
 - Tiles with a "lake" feature add 0.25 days of travel to routes passing through opposite edges.
