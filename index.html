@@ -5043,6 +5043,23 @@ function renderFactionDetail(f) {
     ? f.clocks.map(clock => renderClockCard(f, clock)).join('')
     : '<p style="padding:12px 14px;color:var(--text-muted);font-style:italic;font-size:0.88rem">No clocks. Add one to track a faction agenda.</p>';
 
+  const fPins = (state.pins || []).filter(p => p.factionId === f.id);
+  const fPinRows = fPins.length
+    ? fPins.map(p => {
+        const pt = PIN_TYPES.find(t => t.key === p.type) || PIN_TYPES[PIN_TYPES.length - 1];
+        const dot = `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:${pinDisplayColor(p)};color:#fff;font-size:8px;font-weight:bold;flex-shrink:0">${pt.glyph}</span>`;
+        const nameHtml = p.name ? escHtml(p.name) : '<em style="color:var(--text-muted)">Unnamed</em>';
+        return `<div onclick="openLocalMapAtPin('${p.id}')" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.1s" onmouseover="this.style.background='var(--panel-lite)'" onmouseout="this.style.background=''">
+          ${dot}
+          <div style="flex:1;min-width:0">
+            <div style="font-size:0.88rem;color:var(--text)">${nameHtml}</div>
+            <div style="font-size:0.75rem;color:var(--text-muted)">${escHtml(p.hexKey)}</div>
+          </div>
+          <span style="font-size:0.75rem;color:var(--gold-dim)">→</span>
+        </div>`;
+      }).join('')
+    : '<p style="padding:12px 14px;color:var(--text-muted);font-style:italic;font-size:0.88rem">No pins assigned to this faction.</p>';
+
   const fNpcs = state.npcs.filter(n => n.factionId === f.id);
   const fNpcRows = fNpcs.length
     ? fNpcs.map(n => {
@@ -5127,6 +5144,11 @@ function renderFactionDetail(f) {
         <div style="padding:8px 12px;border-top:1px solid var(--border)">
           <button class="btn-small" onclick="addNpcToFaction('${f.id}')">+ Add NPC to this Faction</button>
         </div>
+      </div>
+
+      <div class="section-box section-full">
+        <div class="section-title">Locations</div>
+        ${fPinRows}
       </div>
     </div>
 
