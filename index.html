@@ -3698,6 +3698,7 @@ function applyMapSettings() {
   });
   if (_deletedKeys.size) {
     state.pins = state.pins.filter(p => !_deletedKeys.has(p.hexKey));
+    state.quests.forEach(q => { if (q.hexKey && _deletedKeys.has(q.hexKey)) q.hexKey = null; });
     _deletedKeys.forEach(k => { delete state.localMaps[k]; });
     if (_localmapHexKey && _deletedKeys.has(_localmapHexKey)) closeLocalMap();
     _invalidatePinCache();
@@ -4344,7 +4345,6 @@ function deleteRumor(id) {
   state.rumors = state.rumors.filter(r => r.id !== id); save();
   renderRumorsActive(); renderRumorsArchived();
 }
-// TODO(slice 15/16): cascade to events.pinIds / events.questId on delete
 
 function setRumorFilter(f) {
   state.ui.rumorFilter = f; save(); renderRumorsActive();
@@ -4560,6 +4560,13 @@ function renderQuestSidebar() {
   }).join('');
 }
 
+function goToEvent(id) {
+  state.ui.activeEventId = id;
+  state.ui.activeTab = 'events';
+  save();
+  switchTab('events');
+}
+
 function setQuestPin(id, val) {
   const q = state.quests.find(q => q.id === id); if (!q) return;
   q.pinId = val || null;
@@ -4578,6 +4585,29 @@ function setQuestFaction(id, val) {
   const q = state.quests.find(q => q.id === id); if (!q) return;
   q.factionId = val || null;
   save(); renderQuestSidebar(); renderQuestDetail();
+}
+
+function _renderQuestEventHistory(questId) {
+  const E_UC = { low: 'var(--text-dim)', medium: 'var(--gold-dim)', high: '#c07820', critical: 'var(--red)' };
+  const events = (state.events || [])
+    .filter(e => e.questId === questId)
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  if (!events.length) return `
+    <div style="color:var(--text-muted);font-style:italic;font-size:0.85rem;padding:4px 0">No events linked to this quest yet.</div>
+    <div style="font-size:0.75rem;color:var(--text-muted);margin-top:6px">To add an event, open the Events tab and link it to this quest from there.</div>`;
+  return events.map(e => {
+    const dateStr = e.date ? escHtml(e.date) : '<span style="color:var(--text-muted);font-style:italic">(no date)</span>';
+    const urgDot  = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${E_UC[e.urgency]||'var(--text-dim)'};flex-shrink:0"></span>`;
+    const lock    = e.playerKnown ? '' : `<span style="font-size:0.7rem;color:var(--text-muted)">🔒</span>`;
+    const preview = escHtml((e.text || '').slice(0, 60)) + ((e.text||'').length > 60 ? '…' : '');
+    return `<div onclick="goToEvent('${e.id}')" style="display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;border-radius:3px;transition:background 0.1s" onmouseover="this.style.background='var(--panel-lite)'" onmouseout="this.style.background=''">
+      <span style="font-size:0.78rem;color:var(--text-muted);white-space:nowrap;flex-shrink:0">${dateStr}</span>
+      ${urgDot}
+      <span style="flex:1;font-size:0.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${preview||'<span style="color:var(--text-muted);font-style:italic">(no text)</span>'}</span>
+      ${lock}
+      <span style="color:var(--gold-dim);font-size:0.8rem;flex-shrink:0">→</span>
+    </div>`;
+  }).join('') + `<div style="font-size:0.75rem;color:var(--text-muted);margin-top:6px">To add an event, open the Events tab and link it to this quest from there.</div>`;
 }
 
 function renderQuestDetail() {
@@ -4688,6 +4718,10 @@ function renderQuestDetail() {
           <textarea class="section-textarea" style="min-height:120px;margin-top:4px"
             placeholder="GM notes, branches, complications…"
             oninput="updateQuestField('${q.id}','notes',this.value)">${escHtml(q.notes)}</textarea>
+        </div>
+        <div style="border-top:1px solid var(--border);padding-top:12px">
+          <div class="section-title" style="margin-bottom:8px">Event History</div>
+          ${_renderQuestEventHistory(q.id)}
         </div>
       </div>
     </div>`;

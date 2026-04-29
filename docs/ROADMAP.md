@@ -1,4 +1,4 @@
-# Roadmap (as of slice 15 complete)
+# Roadmap (as of slice 16 complete)
 
 ## Done
 - Slice 1: Shell + state layer + CSS foundation
@@ -23,6 +23,7 @@
 - Slice 14.10.1: Overlay rendering fixes — ponds no longer erase rivers, centripetal Catmull-Rom, no center-snapping on drag, per-segment flow arrows
 - Slice 14.11: Map undo system — snapshot-based, in-memory, 50-entry cap, drag = one unit
 - Slice 15: Local maps + pins (schema v14) — pin CRUD, world-map dots, local map modal, image upload, drag/edit, cascades
+- Slice 16: Quests tab — Active/Archive sub-tabs, status/urgency, all field editors, event history readout; cross-link UI pending slice 18
 
 ## Deferred
 
@@ -30,7 +31,6 @@
 
 
 ## Planned
-- Slice 16: Quests tab
 - Slice 17: Cross-link pass 1 (pin ↔ faction, pin ↔ NPCs)
 - Slice 18: Cross-link pass 2 (rumor ↔ pin/hex, NPC ↔ pin, session autocomplete)
 - Slice 19: Narrative-event recorder + map tweaks
@@ -45,6 +45,8 @@
 - Recolour roads for better visibility (add yellow border)
 - Double-click hex opens local map
 - Draw/Edit travel route
+- Routes crossing a river add appropriate travel time (each crossing = +0.25 days of travel IF no bridge)
+- Tiles with a "lake" feature add 0.25 days of travel to routes passing through opposite edges.
 - Route calculator finds shortest possible travel route WITHOUT going through impassable hexes
 - Route shown on map with dashed line by default -> "Mark Route on Map" button changes to "Save Route on Map"
 - Toggle explored filter in map mode (GM Only)

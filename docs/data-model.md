@@ -318,6 +318,8 @@ Setting one clears the other. Enforced in the UI, not the schema.
 
 A quest's history is captured by events linked via `questId`.
 
+**UI tab grouping.** The Quests tab's Active sub-tab shows quests with `status: 'available'` or `status: 'active'`; the Archive sub-tab shows `'completed'`, `'failed'`, and `'abandoned'`. Changing a quest's status moves it between sub-tabs automatically.
+
 ### Event
 
 A thing that happens NOT during a session, linkable to any combination of entities.
