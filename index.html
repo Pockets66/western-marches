@@ -1255,7 +1255,7 @@ function toast(msg) {
 const STORAGE_KEY = 'wm_unified_v1';
 
 let state = {
-  schemaVersion: 13,
+  schemaVersion: 14,
   factions:  [],
   npcs:      [],
   rumors:    [],
@@ -1265,6 +1265,7 @@ let state = {
   sessions:  [],
   hexes:     {},
   pins:      [],
+  localMaps: {},
   relations: {},
   mapMeta:   { colMin: -11, colMax: 10, rowMin: -8, rowMax: 7, hexSize: 32 },
   ui: {
@@ -1304,7 +1305,7 @@ function load() {
   try {
     const parsed = JSON.parse(raw);
     const v = parsed.schemaVersion || 1;
-    if (v <= 13) {
+    if (v <= 14) {
       if (v < 2) migrateFactions(parsed);
       if (v < 3) migrateToV3(parsed);
       if (v < 4) migrateToV4(parsed);
@@ -1317,7 +1318,10 @@ function load() {
       if (v < 11) migrateToV11(parsed);
       if (v < 12) migrateToV12(parsed);
       if (v < 13) migrateToV13(parsed);
+      if (v < 14) migrateToV14(parsed);
       state = parsed;
+      if (!state.localMaps || typeof state.localMaps !== 'object') state.localMaps = {};
+      if (!Array.isArray(state.pins)) state.pins = [];
       if (state.ui && state.ui.activeTab === 'relations') state.ui.activeTab = 'factions';
       if (state.ui && !('activeSessionId'        in state.ui)) state.ui.activeSessionId        = null;
       if (state.ui && !('activeEventId'          in state.ui)) state.ui.activeEventId          = null;
@@ -1526,6 +1530,22 @@ function migrateToV13(parsed) {
   parsed.schemaVersion = 13;
 }
 
+function migrateToV14(parsed) {
+  parsed.localMaps = parsed.localMaps || {};
+  parsed.pins = parsed.pins || [];
+  parsed.pins.forEach(p => {
+    if (!('discovered' in p)) p.discovered = false;
+    if (!('factionId'  in p)) p.factionId  = null;
+    if (!('notes'      in p)) p.notes      = '';
+    if (!('type'       in p)) p.type       = 'other';
+    if (!('x'          in p)) p.x          = 0;
+    if (!('y'          in p)) p.y          = 0;
+    if (!('hexKey'     in p)) p.hexKey     = '0,0';
+    if (!('name'       in p)) p.name       = '';
+  });
+  parsed.schemaVersion = 14;
+}
+
 function migrateFactions(parsed) {
   const activityMap = { dormant: 'dormant', rising: 'active', active: 'active', defeated: 'disbanded' };
   (parsed.factions || []).forEach(f => {
@@ -1611,6 +1631,25 @@ const TICONS = {
   mountain: '▲', water: '≋', swamp: '⊛', desert: '∿', ruins: '⚔', settled: '⌂',
 };
 const TORDER = ['plains','forest','dark-forest','hills','mountain','water','swamp','desert','ruins','settled','unknown'];
+
+const PIN_TYPES = [
+  { key: 'settlement', label: 'Settlement', glyph: 'S', color: '#c8972a' },
+  { key: 'dungeon',    label: 'Dungeon',    glyph: 'D', color: '#6a3d9e' },
+  { key: 'ruin',       label: 'Ruin',       glyph: 'R', color: '#7a7a6a' },
+  { key: 'landmark',   label: 'Landmark',   glyph: 'L', color: '#2a9a8a' },
+  { key: 'threat',     label: 'Threat',     glyph: 'T', color: '#c83a3a' },
+  { key: 'camp',       label: 'Camp',       glyph: 'C', color: '#c87a2a' },
+  { key: 'other',      label: 'Other',      glyph: 'O', color: '#6a6a7a' },
+];
+
+function pinDisplayColor(p) {
+  if (p.factionId) {
+    const f = (state.factions || []).find(f => f.id === p.factionId);
+    if (f && f.color) return f.color;
+  }
+  const pt = PIN_TYPES.find(t => t.key === p.type);
+  return pt ? pt.color : '#6a6a7a';
+}
 const _EDGE_LABELS = ['E','SE','SW','W','NW','NE']; // matches edgeMidpoint convention: 0=E,1=SE,2=SW,3=W,4=NW,5=NE
 
 let _mapCurTerrain    = 'plains';
@@ -1637,14 +1676,17 @@ let _mapNameNoteLastKey = null;
 let _mapUndoTxnSnap     = null;  // non-null when a drag transaction is open
 
 function _mapSnapshot() {
-  return JSON.stringify({ mapMeta: state.mapMeta, hexes: state.hexes });
+  return JSON.stringify({ mapMeta: state.mapMeta, hexes: state.hexes, pins: state.pins, localMaps: state.localMaps });
 }
 
 function _mapRestoreSnapshot(snap) {
   const d = JSON.parse(snap);
-  state.mapMeta = d.mapMeta;
-  state.hexes   = d.hexes;
+  state.mapMeta   = d.mapMeta;
+  state.hexes     = d.hexes;
+  state.pins      = d.pins      || [];
+  state.localMaps = d.localMaps || {};
   _invalidateOverlayCache();
+  _invalidatePinCache();
   save();
   drawWorld();
   if (_mapSelHex) {
@@ -1965,6 +2007,22 @@ function findRuns(graph) {
 let _overlayCacheVersion = 0;
 let _overlayCacheRenderedVersion = -1;
 let _overlayCache = { rivers: null, roads: null, routes: null };
+
+let _pinCacheVersion = 0;
+let _pinCacheBuiltAt = -1;
+let _pinByHexCache   = null;
+
+function _invalidatePinCache() { _pinCacheVersion++; }
+function _pinsByHex() {
+  if (_pinByHexCache !== null && _pinCacheBuiltAt === _pinCacheVersion) return _pinByHexCache;
+  _pinByHexCache = {};
+  (state.pins || []).forEach(p => {
+    if (!_pinByHexCache[p.hexKey]) _pinByHexCache[p.hexKey] = [];
+    _pinByHexCache[p.hexKey].push(p);
+  });
+  _pinCacheBuiltAt = _pinCacheVersion;
+  return _pinByHexCache;
+}
 
 function _invalidateOverlayCache() { _overlayCacheVersion++; }
 
@@ -2420,7 +2478,58 @@ function drawWorld() {
       }
     }
   }
+  _renderWorldPins(ctx);
   updateMapStatus();
+}
+
+function _pinDotPositions(cx, cy, n, hexSize) {
+  if (n === 0) return [];
+  if (n === 1) return [{ x: cx, y: cy }];
+  if (n === 2) return [{ x: cx - hexSize * 0.14, y: cy }, { x: cx + hexSize * 0.14, y: cy }];
+  const spread = hexSize * 0.25;
+  return Array.from({ length: n }, (_, i) => {
+    const angle = (i / n) * Math.PI * 2 - Math.PI / 2;
+    return { x: cx + Math.cos(angle) * spread, y: cy + Math.sin(angle) * spread };
+  });
+}
+
+function _renderWorldPins(ctx) {
+  const { hexSize } = state.mapMeta;
+  const dotR = Math.max(4, hexSize * 0.12);
+  const fontSize = Math.max(6, Math.round(hexSize * 0.18));
+  const byHex = _pinsByHex();
+  ctx.save();
+  ctx.font = `bold ${fontSize}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  Object.entries(byHex).forEach(([hexKey, pins]) => {
+    const [c, row] = hexKey.split(',').map(Number);
+    const hex = state.hexes[hexKey];
+    if (!hex || hex.terrain === 'unknown') return;
+    const { x: cx, y: cy } = hexCenter(c, row);
+    const positions = _pinDotPositions(cx, cy, pins.length, hexSize);
+    pins.forEach((pin, i) => {
+      const { x: px, y: py } = positions[i];
+      ctx.beginPath();
+      ctx.arc(px, py, dotR, 0, Math.PI * 2);
+      ctx.fillStyle = pinDisplayColor(pin);
+      ctx.fill();
+      ctx.lineWidth = 1;
+      if (!pin.discovered) {
+        ctx.setLineDash([2, 2]);
+        ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+      } else {
+        ctx.setLineDash([]);
+        ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+      const pt = PIN_TYPES.find(t => t.key === pin.type);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(pt ? pt.glyph : 'O', px, py);
+    });
+  });
+  ctx.restore();
 }
 
 // ── Map — toolbar & mode ──────────────────────────────────────────────────────
@@ -2725,6 +2834,126 @@ function _initMapEvents() {
   canvas.addEventListener('mouseleave', () => { _finishOverlayDrag(false); _mapHoverHex = null; updateMapStatus(); });
 }
 
+// ── Map — pin CRUD ────────────────────────────────────────────────────────────
+
+let _editingPinId = null;
+
+function addPin(c, r) {
+  _pushMapUndo();
+  const hexKey = c + ',' + r;
+  const pin = { id: uid(), hexKey, name: '', type: 'other', discovered: false,
+                factionId: null, notes: '', x: 400, y: 300 };
+  state.pins.push(pin);
+  _editingPinId = pin.id;
+  _invalidatePinCache();
+  save(); drawWorld(); renderMapInfo(c, r);
+}
+
+function deletePin(id, c, r) {
+  _pushMapUndo();
+  state.pins = state.pins.filter(p => p.id !== id);
+  if (_editingPinId === id) _editingPinId = null;
+  _invalidatePinCache();
+  save(); drawWorld(); renderMapInfo(c, r);
+}
+
+function togglePinDiscovered(id, c, r) {
+  const pin = state.pins.find(p => p.id === id); if (!pin) return;
+  _pushMapUndo();
+  pin.discovered = !pin.discovered;
+  _invalidatePinCache();
+  save(); drawWorld(); renderMapInfo(c, r);
+}
+
+function setPinField(id, field, val, c, r) {
+  const pin = state.pins.find(p => p.id === id); if (!pin) return;
+  _pushMapUndo();
+  pin[field] = val;
+  _invalidatePinCache();
+  save(); drawWorld(); renderMapInfo(c, r);
+}
+
+let _pinTextTimer = null;
+let _pinTextLastKey = null;
+
+function _updatePinText(id, field, val) {
+  const pin = state.pins.find(p => p.id === id); if (!pin) return;
+  const key = id + ':' + field;
+  if (_pinTextLastKey !== key) { _pushMapUndo(); _pinTextLastKey = key; }
+  clearTimeout(_pinTextTimer);
+  _pinTextTimer = setTimeout(() => { _pinTextLastKey = null; }, 750);
+  pin[field] = val;
+  _invalidatePinCache();
+  save();
+  if (field === 'name') drawWorld();
+}
+
+function updatePinName(id, val)  { _updatePinText(id, 'name',  val); }
+function updatePinNotes(id, val) { _updatePinText(id, 'notes', val); }
+function pinTextBlur()           { _pinTextLastKey = null; }
+
+function togglePinEditor(id) {
+  _editingPinId = _editingPinId === id ? null : id;
+  // Re-render info panel for the current selected hex
+  if (_mapSelHex) renderMapInfo(_mapSelHex.col, _mapSelHex.row);
+}
+
+function _renderPinSection(c, r) {
+  const hexKey = c + ',' + r;
+  const pins = (state.pins || []).filter(p => p.hexKey === hexKey);
+  const iSel = 'background:var(--panel-dark);border:1px solid var(--border);color:var(--text);padding:2px 4px;font-size:0.8rem;width:100%';
+  let rows = '';
+  pins.forEach(pin => {
+    const pt  = PIN_TYPES.find(t => t.key === pin.type) || PIN_TYPES[PIN_TYPES.length - 1];
+    const col = pinDisplayColor(pin);
+    const dot = `<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:${col};color:#fff;font-size:9px;font-weight:bold;flex-shrink:0">${pt.glyph}</span>`;
+    const nameLabel = pin.name ? escHtml(pin.name) : `<span style="color:var(--text-muted);font-style:italic">&lt;unnamed&gt;</span>`;
+    const discStyle = `opacity:${pin.discovered ? 1 : 0.35}`;
+    const isEditing = _editingPinId === pin.id;
+    let editor = '';
+    if (isEditing) {
+      const typeOpts    = PIN_TYPES.map(t => `<option value="${t.key}"${pin.type===t.key?' selected':''}>${t.label}</option>`).join('');
+      const factionOpts = `<option value="">— none —</option>` +
+        (state.factions || []).map(f => `<option value="${f.id}"${pin.factionId===f.id?' selected':''}>${escHtml(f.name)}</option>`).join('');
+      editor = `
+        <div style="background:var(--panel-dark);border:1px solid var(--border);border-radius:4px;padding:8px;display:flex;flex-direction:column;gap:6px;margin-top:2px">
+          <input class="field-input" style="font-size:0.85rem" placeholder="Pin name…"
+            value="${escHtml(pin.name)}"
+            oninput="updatePinName('${pin.id}',this.value)" onblur="pinTextBlur()">
+          <select style="${iSel}" onchange="setPinField('${pin.id}','type',this.value,${c},${r})">${typeOpts}</select>
+          <select style="${iSel}" onchange="setPinField('${pin.id}','factionId',this.value||null,${c},${r})">${factionOpts}</select>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;font-size:0.82rem">
+            <input type="checkbox" ${pin.discovered ? 'checked' : ''}
+              onchange="setPinField('${pin.id}','discovered',this.checked,${c},${r})">
+            Discovered (players know this location)
+          </label>
+          <textarea class="section-textarea" style="min-height:50px;font-size:0.8rem"
+            placeholder="Notes…"
+            oninput="updatePinNotes('${pin.id}',this.value)" onblur="pinTextBlur()">${escHtml(pin.notes)}</textarea>
+          <button class="map-action-btn" style="background:rgba(180,60,60,0.18);border-color:#c05050;color:#e08080"
+            onclick="deletePin('${pin.id}',${c},${r})">Delete pin</button>
+        </div>`;
+    }
+    rows += `
+      <div style="display:flex;align-items:center;gap:6px;padding:2px 0">
+        ${dot}
+        <span style="flex:1;font-size:0.82rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nameLabel}</span>
+        <button title="${pin.discovered ? 'Discovered' : 'Undiscovered'}"
+          style="background:none;border:none;cursor:pointer;font-size:0.85rem;padding:0 2px;${discStyle}"
+          onclick="togglePinDiscovered('${pin.id}',${c},${r})">&#128065;</button>
+        <button class="map-action-btn" style="padding:1px 6px;font-size:0.75rem"
+          onclick="togglePinEditor('${pin.id}')">${isEditing ? 'Done' : 'Edit'}</button>
+      </div>${editor}`;
+  });
+  if (!pins.length) rows = '<span style="color:var(--text-muted);font-style:italic;font-size:0.82rem">No pins.</span>';
+  return `
+    <div style="border-top:1px solid var(--border);padding-top:10px;display:flex;flex-direction:column;gap:6px">
+      <div class="map-info-lbl">Pins</div>
+      ${rows}
+      <button class="map-action-btn" style="margin-top:2px" onclick="addPin(${c},${r})">+ New pin</button>
+    </div>`;
+}
+
 // ── Map — info panel ─────────────────────────────────────────────────────────
 
 // ── Map — overlay segment editor ─────────────────────────────────────────────
@@ -2971,6 +3200,7 @@ function renderMapInfo(c, r) {
         oninput="updateMapHexField(${c},${r},'note',this.value)" onblur="mapHexFieldBlur()">${escHtml(hex.note)}</textarea>
     </div>
     <button class="map-save-btn" id="map-save-btn" onclick="mapSaveNoteFlash()">Save Note</button>
+    ${_renderPinSection(c, r)}
     ${_renderOverlayEditor(c, r, hex)}`;
 }
 
