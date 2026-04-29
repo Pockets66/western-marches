@@ -2898,14 +2898,24 @@ function addPin(c, r) {
   _editingPinId = pin.id;
   _invalidatePinCache();
   save(); drawWorld(); renderMapInfo(c, r);
+  toast('Pin added.');
+}
+
+function _cascadeDeletePin(id) {
+  state.pins = state.pins.filter(p => p.id !== id);
+  state.npcs.forEach(n    => { if (n.pinId    === id) n.pinId    = null; });
+  state.rumors.forEach(r  => { if (r.pinId    === id) r.pinId    = null; });
+  state.quests.forEach(q  => { if (q.pinId    === id) q.pinId    = null; });
+  state.events.forEach(e  => { e.pinIds = (e.pinIds || []).filter(pid => pid !== id); });
 }
 
 function deletePin(id, c, r) {
   _pushMapUndo();
-  state.pins = state.pins.filter(p => p.id !== id);
+  _cascadeDeletePin(id);
   if (_editingPinId === id) _editingPinId = null;
   _invalidatePinCache();
   save(); drawWorld(); renderMapInfo(c, r);
+  toast('Pin deleted.');
 }
 
 function togglePinDiscovered(id, c, r) {
@@ -3606,10 +3616,17 @@ function applyMapSettings() {
     return;
   }
   _pushMapUndo();
+  const _deletedKeys = new Set();
   Object.keys(state.hexes).forEach(k => {
     const [c, r] = k.split(',').map(Number);
-    if (c < nColMin || c > nColMax || r < nRowMin || r > nRowMax) delete state.hexes[k];
+    if (c < nColMin || c > nColMax || r < nRowMin || r > nRowMax) { delete state.hexes[k]; _deletedKeys.add(k); }
   });
+  if (_deletedKeys.size) {
+    state.pins = state.pins.filter(p => !_deletedKeys.has(p.hexKey));
+    _deletedKeys.forEach(k => { delete state.localMaps[k]; });
+    if (_localmapHexKey && _deletedKeys.has(_localmapHexKey)) closeLocalMap();
+    _invalidatePinCache();
+  }
   if (_mapSelHex && (_mapSelHex.col < nColMin || _mapSelHex.col > nColMax ||
                      _mapSelHex.row < nRowMin || _mapSelHex.row > nRowMax)) {
     _mapSelHex = null;
@@ -3816,7 +3833,7 @@ function lmSetPinField(id, field, val) {
 function lmDeletePin(id) {
   if (!confirm('Delete this pin?')) return;
   _pushMapUndo();
-  state.pins = state.pins.filter(p => p.id !== id);
+  _cascadeDeletePin(id);
   if (_lmSelPinId === id) { _lmSelPinId = null; _lmDragPin = null; }
   _invalidatePinCache();
   save();
@@ -3824,6 +3841,7 @@ function lmDeletePin(id) {
   drawWorld();
   if (_mapSelHex) renderMapInfo(_mapSelHex.col, _mapSelHex.row);
   _updateLmPinEditor();
+  toast('Pin deleted.');
 }
 
 function _lmOnMousedown(e) {
@@ -3843,6 +3861,7 @@ function _lmOnMousedown(e) {
     drawWorld();
     if (_mapSelHex) renderMapInfo(_mapSelHex.col, _mapSelHex.row);
     _updateLmPinEditor();
+    toast('Pin added.');
     return;
   }
   // Select mode
@@ -3992,12 +4011,23 @@ function localMapUploadImage() {
       off.getContext('2d').drawImage(img, 0, 0, w, h);
       const dataUrl = off.toDataURL('image/jpeg', 0.85);
       const lm = state.localMaps[_localmapHexKey];
+      const prevDataUrl = lm.imageDataUrl;
+      const prevW = lm.width, prevH = lm.height;
       _pushMapUndo();
       lm.imageDataUrl = dataUrl;
       lm.width  = w;
       lm.height = h;
       delete _localmapImgCache[_localmapHexKey];
-      save();
+      try {
+        save();
+      } catch (err) {
+        lm.imageDataUrl = prevDataUrl; lm.width = prevW; lm.height = prevH;
+        delete _localmapImgCache[_localmapHexKey];
+        _mapUndoStack.pop(); _refreshUndoButtons();
+        _drawLocalMap();
+        toast('Storage full — image not saved.');
+        return;
+      }
       _drawLocalMap();
       toast('Image stored (~' + Math.round(dataUrl.length * 0.75 / 1024) + 'kB)');
     };
@@ -4330,7 +4360,10 @@ function deleteFaction(id) {
   });
   state.factions = state.factions.filter(f => f.id !== id);
   if (state.ui.activeFactionId === id) state.ui.activeFactionId = null;
+  _invalidatePinCache();
   save(); renderFactionSidebar(); renderFactionDetail(null);
+  drawWorld();
+  if (_localmapHexKey) _updateLmPinEditor();
   toast('Faction removed.');
 }
 

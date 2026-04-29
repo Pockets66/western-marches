@@ -1,4 +1,4 @@
-# Roadmap (as of slice 14.11 complete)
+# Roadmap (as of slice 15 complete)
 
 ## Done
 - Slice 1: Shell + state layer + CSS foundation
@@ -22,6 +22,7 @@
 - Slice 14.10: Segment-based overlay model consolidation (schema v13) — smooth turns, parallel roads, segment editor, sync flow, lake-blocks-roads
 - Slice 14.10.1: Overlay rendering fixes — ponds no longer erase rivers, centripetal Catmull-Rom, no center-snapping on drag, per-segment flow arrows
 - Slice 14.11: Map undo system — snapshot-based, in-memory, 50-entry cap, drag = one unit
+- Slice 15: Local maps + pins (schema v14) — pin CRUD, world-map dots, local map modal, image upload, drag/edit, cascades
 
 ## Deferred
 
@@ -29,7 +30,6 @@
 
 
 ## Planned
-- Slice 15: Local maps + pins
 - Slice 16: Quests tab
 - Slice 17: Cross-link pass 1 (pin ↔ faction, pin ↔ NPCs)
 - Slice 18: Cross-link pass 2 (rumor ↔ pin/hex, NPC ↔ pin, session autocomplete)

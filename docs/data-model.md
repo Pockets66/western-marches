@@ -78,6 +78,12 @@ v11 → v12:
   - Water overlays (`type: "water"`) are new in v12; no migration needed.
 - Increment schemaVersion to 12.
 
+v13 → v14 (slice 15 — pins + local maps):
+- Migration `migrateToV14()`: add `state.localMaps = {}` if missing; add `state.pins = []` if
+  missing; for each pin ensure all fields present (`discovered`, `factionId`, `notes`, `type`,
+  `x`, `y`, `hexKey`, `name`).
+- Increment schemaVersion to 14.
+
 v12 → v13 (slice 14.10 — segment model consolidation):
 - Migration `migrateToV13()`: for every hex overlay:
   - Water: add `segments: []`, delete `edges`.
@@ -109,7 +115,7 @@ Import should be a deliberate user action, not automatic — see future slice.
 
 ```js
 state = {
-  schemaVersion: 13,
+  schemaVersion: 14,
   factions:    [Faction],
   npcs:        [NPC],
   rumors:      [Rumor],
@@ -120,6 +126,7 @@ state = {
   mapMeta:     MapMeta,
   hexes:       { "col,row": Hex },
   pins:        [Pin],
+  localMaps:   { "col,row": LocalMap },
   relations:   { "factionIdA|factionIdB": Relation },
   ui: {
     activeTab: "map" | "factions" | "rumors" | "quests"
@@ -495,17 +502,32 @@ them. Clearing a hex's terrain does NOT clear its overlays (roads and rivers are
 independent of terrain). Resizing the map to shrink bounds deletes out-of-bounds
 hexes entirely, which removes their overlays as part of the hex deletion.
 
+### LocalMap
+
+Stored at `state.localMaps["col,row"]` — one entry per hex, optional.
+
+```js
+{
+  imageDataUrl: string | null,   // base64 JPEG data URL (≤1600px longest dim, quality 0.85), or null
+  width:  number,                // canvas width in pixels
+  height: number,                // canvas height in pixels
+}
+```
+
+Default for a blank local map: `{ imageDataUrl: null, width: 800, height: 600 }`.
+When `imageDataUrl` is null the canvas renders a parchment-tinted background.
+
 ### Map Undo
 
 In-memory only — not persisted to `localStorage` and clears on every page reload.
 
-- **Scope:** `state.mapMeta` + `state.hexes` only. Other tabs unaffected.
+- **Scope:** `state.mapMeta` + `state.hexes` + `state.pins` + `state.localMaps`. Other tabs unaffected.
 - **Stack cap:** 50 entries per stack (undo and redo); oldest entry dropped when exceeded.
-- **Snapshot model:** each entry is `JSON.stringify({ mapMeta, hexes })`. Restoring
-  parses it, assigns both fields, then calls `save()` — so `localStorage` tracks the
+- **Snapshot model:** each entry is `JSON.stringify({ mapMeta, hexes, pins, localMaps })`. Restoring
+  parses it, assigns all four fields, then calls `save()` — so `localStorage` tracks the
   post-undo state. If the user reloads, they see the post-undo state with an empty stack.
 - **Drag = one unit:** a transaction captures a single pre-drag snapshot at mousedown
-  for overlay paint/erase; committed on mouseup/mouseleave.
+  for overlay paint/erase and pin drag; committed on mouseup/mouseleave.
 - **Import clears stacks:** after a successful map import both stacks are reset (prior
   history is irrelevant to a different map).
 
@@ -515,8 +537,8 @@ In-memory only — not persisted to `localStorage` and clears on every page relo
 {
   id: string,
   hexKey: string,              // "col,row", which hex it lives in
-  x: number,                   // local map coords, pixels
-  y: number,
+  x: number,                   // local map coords, pixels (default 400)
+  y: number,                   // local map coords, pixels (default 300)
   type: "settlement" | "dungeon" | "ruin" | "landmark" | "threat" | "camp" | "other",
   name: string,
   notes: string,
@@ -525,6 +547,24 @@ In-memory only — not persisted to `localStorage` and clears on every page relo
 }
 ```
 
+**World map rendering.** Pins render as small colored dots (radius `hexSize * 0.12`) clustered
+around the hex center. Color is the faction color if `factionId` is set, else a per-type default.
+Undiscovered pins use a dashed stroke. Pins on `terrain: 'unknown'` hexes are hidden.
+
+**Local map rendering.** Pins render at their `(x, y)` coordinates as 14px circles with a glyph
+and name label below. The selected pin gets a gold highlight ring. Pins are draggable via the
+local map modal.
+
+**Cascade rules:**
+- **Delete faction** → set `factionId = null` on all pins referencing it. Pin dots recolor to
+  type-default color.
+- **Delete pin** → set `pinId = null` on referencing NPCs, rumors, quests; remove from
+  `event.pinIds` arrays.
+- **Resize map (shrink)** → pins whose `hexKey` falls outside the new bounds are deleted;
+  `state.localMaps[hexKey]` entries for deleted hexes are also removed.
+- **Clear hex terrain** (erase tool) → does NOT delete pins or local map.
+
+**Cross-links** (UI available from slice 17/18 onwards):
 A pin's NPCs:    `state.npcs.filter(n => n.pinId === pin.id)`
 A pin's rumors:  `state.rumors.filter(r => r.pinId === pin.id)`
 A pin's quests:  `state.quests.filter(q => q.pinId === pin.id)`
