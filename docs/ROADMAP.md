@@ -48,6 +48,8 @@
 - Toggle explored filter in map mode (GM Only)
 - Player-facing version of map
 - Player-facing version of each tab
+- Move pins within hex from world-map view
+- Toggle local map pin visibility on world-map
 - Port everything to web with live updating player-facing pages
 - Player forum
 
