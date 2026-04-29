@@ -1804,6 +1804,10 @@ let _mapReady      = false;
 let _mapRafId      = null;
 let _mapLastClickPx = 0, _mapLastClickPy = 0;
 let _rulerPathSet = null;
+let _rulerPath    = null;
+const RULER_COLOR_A = '#00bcd4';
+const RULER_COLOR_B = '#e91e63';
+const ROAD_CONTINUITY_BONUS = 0.95;
 let _mapDragLastHex    = null;
 let _mapDragLastAnchor = null;  // anchor ('C' | 0-5) at the tail of the last painted segment
 let _mapDragOccurred   = false; // did the mousedown become an actual drag stroke?
@@ -2634,18 +2638,12 @@ function drawWorld() {
   const bg = ctx.createRadialGradient(CW/2, CH/2, 0, CW/2, CH/2, Math.max(CW, CH));
   bg.addColorStop(0, '#1a1208'); bg.addColorStop(1, '#080502');
   ctx.fillStyle = bg; ctx.fillRect(0, 0, CW, CH);
-  if (state.ui.rulerHexA && state.ui.rulerHexB) {
-    const [_rAc, _rAr] = state.ui.rulerHexA.split(',').map(Number);
-    const [_rBc, _rBr] = state.ui.rulerHexB.split(',').map(Number);
-    const _fp = hexLine({ col: _rAc, row: _rAr }, { col: _rBc, row: _rBr });
-    _rulerPathSet = new Set(_fp.slice(1, -1).map(h => h.col + ',' + h.row));
-  } else { _rulerPathSet = null; }
   for (let r = rowMin; r <= rowMax; r++) for (let c = colMin; c <= colMax; c++) drawWorldHex(c, r);
   buildAndRenderOverlays(ctx);
-  // Path-highlight (above overlays)
+  const { hexSize: _hs } = state.mapMeta;
+  // Interior path-highlight (golden fill, above overlays)
   if (_rulerPathSet && _rulerPathSet.size) {
-    const { colMin: _cl, colMax: _cx, rowMin: _rl, rowMax: _rx, hexSize: _hs } = state.mapMeta;
-    for (let _r = _rl; _r <= _rx; _r++) for (let _c = _cl; _c <= _cx; _c++) {
+    for (let _r = rowMin; _r <= rowMax; _r++) for (let _c = colMin; _c <= colMax; _c++) {
       if (_rulerPathSet.has(_c + ',' + _r)) {
         const { x: _px, y: _py } = hexCenter(_c, _r);
         const _pts = hexCorners(_px, _py, _hs - 1);
@@ -2655,9 +2653,40 @@ function drawWorld() {
       }
     }
   }
+  // Dashed live preview
+  if (_rulerPath && _rulerPath.length >= 2) _drawRulerPreview(ctx, _rulerPath);
+  // Ruler A (cyan) / B (magenta) outlines
+  if (_mapCurMode === 'rulerA' || _mapCurMode === 'rulerB') {
+    [[state.ui.rulerHexA, RULER_COLOR_A], [state.ui.rulerHexB, RULER_COLOR_B]].forEach(([hk, col]) => {
+      if (!hk) return;
+      const [_hc, _hr] = hk.split(',').map(Number);
+      const { x: _hx, y: _hy } = hexCenter(_hc, _hr);
+      const _hpts = hexCorners(_hx, _hy, _hs - 1);
+      ctx.beginPath(); ctx.moveTo(_hpts[0].x, _hpts[0].y);
+      for (let i=1;i<6;i++) ctx.lineTo(_hpts[i].x, _hpts[i].y);
+      ctx.closePath(); ctx.strokeStyle = col; ctx.lineWidth = 3; ctx.setLineDash([]); ctx.stroke();
+    });
+  }
   _drawAllHexNames(ctx);
   _renderWorldPins(ctx);
   updateMapStatus();
+}
+
+function _drawRulerPreview(ctx, path) {
+  if (!path || path.length < 2) return;
+  const { hexSize } = state.mapMeta;
+  ctx.save();
+  ctx.setLineDash([5, 4]); ctx.strokeStyle = '#a02828'; ctx.lineWidth = 2.5; ctx.lineJoin = 'round';
+  ctx.beginPath();
+  const { x: x0, y: y0 } = hexCenter(path[0].col, path[0].row);
+  ctx.moveTo(x0, y0);
+  for (let i = 0; i < path.length - 1; i++) {
+    const eL = _sharedEdge(path[i], path[i+1]);
+    if (eL !== -1) { const { x: ehx, y: ehy } = hexCenter(path[i].col, path[i].row); const [emx,emy] = edgeMidpoint(ehx,ehy,eL,hexSize); ctx.lineTo(emx, emy); }
+  }
+  const { x: xn, y: yn } = hexCenter(path[path.length-1].col, path[path.length-1].row);
+  ctx.lineTo(xn, yn);
+  ctx.stroke(); ctx.restore();
 }
 
 function _pinDotPositions(cx, cy, n, hexSize) {
@@ -2914,13 +2943,19 @@ function _initMapEvents() {
       if (e.shiftKey) { _eraseSingleSegmentAt(h.col, h.row, x, y); }
       else { _eraseOverlay(h.col, h.row); }
       _scheduleRedraw();
-    } else if (_mapCurMode === 'rulerA') {
-      state.ui.rulerHexA = h.col + ',' + h.row;
-      state.ui.rulerHexB = null;
-      save(); setMapMode('rulerB'); _buildMapToolbar(); drawWorld();
-    } else if (_mapCurMode === 'rulerB') {
-      state.ui.rulerHexB = h.col + ',' + h.row;
-      save(); drawWorld(); renderRulerPanel();
+    } else if (_mapCurMode === 'rulerA' || _mapCurMode === 'rulerB') {
+      const _rk = h.col + ',' + h.row;
+      if (!state.ui.rulerHexA) {
+        state.ui.rulerHexA = _rk; state.ui.rulerHexB = null;
+        save(); setMapMode('rulerB'); _buildMapToolbar(); drawWorld();
+      } else if (!state.ui.rulerHexB) {
+        state.ui.rulerHexB = _rk;
+        save(); drawWorld(); renderRulerPanel();
+      } else {
+        state.ui.rulerHexA = _rk; state.ui.rulerHexB = null; state.ui.rulerOverrides = {};
+        _rulerPath = null; _rulerPathSet = null;
+        save(); setMapMode('rulerB'); _buildMapToolbar(); drawWorld();
+      }
     } else {
       if (_mapCurMode === 'explored') { const hex = getHex(h.col, h.row); _mapExploreIntent = !hex.explored; }
       _mapSelHex = h;
@@ -3587,6 +3622,120 @@ function modifierFor(hexKey) {
   }
 }
 
+// Pure terrain modifier — no road bonus, no overrides.
+function terrainModifier(hex) {
+  if (!hex) return 0.5;
+  switch (hex.terrain) {
+    case 'plains': case 'settled':                                    return 1.0;
+    case 'hills':  case 'forest':                                     return 0.5;
+    case 'mountain': case 'swamp': case 'desert':
+    case 'dark-forest': case 'ruins':                                 return 0.25;
+    case 'water':                                                      return 0;
+    default:                                                           return 0.5;
+  }
+}
+
+// BFS through a hex's road segments from eIn to eOut.
+// Returns the segment array (path) if reachable, null otherwise.
+function roadPathInHex(hex, eIn, eOut) {
+  if (eIn === eOut) return null;
+  const roadOv = hex && (hex.overlays||[]).find(o => o.type === 'road');
+  if (!roadOv || !(roadOv.segments||[]).length) return null;
+  const adj = new Map();
+  for (const seg of roadOv.segments) {
+    if (!adj.has(seg.from)) adj.set(seg.from, []);
+    if (!adj.has(seg.to))   adj.set(seg.to,   []);
+    adj.get(seg.from).push({ nbr: seg.to,   seg });
+    adj.get(seg.to).push(  { nbr: seg.from, seg });
+  }
+  if (!adj.has(eIn) || !adj.has(eOut)) return null;
+  const visited = new Set([eIn]);
+  const queue = [{ anchor: eIn, path: [] }];
+  while (queue.length) {
+    const { anchor, path } = queue.shift();
+    if (anchor === eOut) return path;
+    for (const { nbr, seg } of (adj.get(anchor) || [])) {
+      if (!visited.has(nbr)) { visited.add(nbr); queue.push({ anchor: nbr, path: [...path, seg] }); }
+    }
+  }
+  return null;
+}
+
+// Context-aware cost for one hex given the route's entry and exit anchors.
+// Returns { daysCost, modifier, usedRoadBonus }.
+// daysCost === Infinity for impassable hexes (water terrain or impassable override).
+function costForHexInPath(hex, eIn, eOut, hexKey, move) {
+  const ovr = state.ui.rulerOverrides && state.ui.rulerOverrides[hexKey];
+  if (ovr === 'impassable') return { daysCost: Infinity, modifier: 0, usedRoadBonus: false };
+  let baseMod;
+  if (ovr) { baseMod = { plains: 1.0, hills: 0.5, mountain: 0.25 }[ovr] ?? terrainModifier(hex); }
+  else      { baseMod = terrainModifier(hex); }
+  if (baseMod === 0) return { daysCost: Infinity, modifier: 0, usedRoadBonus: false };
+
+  const roadOv = hex && (hex.overlays||[]).find(o => o.type === 'road');
+  if (roadOv) {
+    const hasLake    = (hex.overlays||[]).some(o => o.type === 'water' && o.size === 'lake');
+    const lakeBlocks = hasLake && !(roadOv.segments||[]).some(s => s.from !== 'C' && s.to !== 'C');
+    if (!lakeBlocks && roadPathInHex(hex, eIn, eOut) !== null) {
+      const surfMult  = { dirt: 1.0, gravel: 1.0, stone: 1.5 }[roadOv.surface || 'dirt'] || 1.0;
+      const stateKey  = hex.explored ? (roadOv.state || 'average') : 'average';
+      const stateMult = { horrible: 0.5, poor: 0.75, average: 1.0, good: 1.25 }[stateKey] || 1.0;
+      const mod = surfMult * stateMult;
+      return { daysCost: 1.25 / (move * mod), modifier: mod, usedRoadBonus: true };
+    }
+  }
+  return { daysCost: 1.25 / (move * baseMod), modifier: baseMod, usedRoadBonus: false };
+}
+
+// Dijkstra shortest path. Returns [{col,row}…] array or null if no path exists.
+// Start hex has 0 traversal cost (party already there); all other hex costs via costForHexInPath.
+// Road-continuity tiebreaker (×ROAD_CONTINUITY_BONUS) applied when both current and next hex benefit from road.
+function _dijkstraPath(startKey, goalKey, move) {
+  if (startKey === goalKey) { const [c,r]=startKey.split(',').map(Number); return [{col:c,row:r}]; }
+  const { colMin, colMax, rowMin, rowMax } = state.mapMeta;
+  const INF = Infinity;
+  const dist = new Map(), prev = new Map();
+  const sk = (key, e) => key + '|' + e;
+  const startSK = sk(startKey, 'C');
+  dist.set(startSK, 0);
+  const pq = [{ cost: 0, key: startKey, eIn: 'C' }];
+  while (pq.length) {
+    let mi = 0;
+    for (let i = 1; i < pq.length; i++) if (pq[i].cost < pq[mi].cost) mi = i;
+    const { cost, key: curKey, eIn: curEin } = pq.splice(mi, 1)[0];
+    const curSK = sk(curKey, curEin);
+    if ((dist.get(curSK) ?? INF) < cost) continue;
+    if (curKey === goalKey) {
+      const path = []; let s = curSK;
+      while (s) { const hk = s.split('|')[0]; const [c,r]=hk.split(',').map(Number); path.unshift({col:c,row:r}); s = prev.get(s); }
+      return path;
+    }
+    const [kc,kr] = curKey.split(',').map(Number);
+    const curHex = state.hexes[curKey];
+    const nb = _HEX_NEIGHBORS[Math.abs(kr % 2)];
+    for (let eX = 0; eX < 6; eX++) {
+      const [dc,dr] = nb[eX]; const nc=kc+dc, nr=kr+dr;
+      if (nc<colMin||nc>colMax||nr<rowMin||nr>rowMax) continue;
+      const nKey = nc+','+nr, nEin = (eX+3)%6;
+      let edgeCost=0, curBonus=false;
+      if (curKey !== startKey) {
+        const res = costForHexInPath(curHex, curEin, eX, curKey, move);
+        if (!isFinite(res.daysCost)) continue;
+        edgeCost = res.daysCost; curBonus = res.usedRoadBonus;
+      }
+      if (curBonus) {
+        const nHex = state.hexes[nKey];
+        const nRd = nHex && (nHex.overlays||[]).find(o=>o.type==='road');
+        if (nRd && (nRd.segments||[]).some(s=>s.from===nEin||s.to===nEin)) edgeCost *= ROAD_CONTINUITY_BONUS;
+      }
+      const newCost = cost + edgeCost;
+      const nSK = sk(nKey, nEin);
+      if (newCost < (dist.get(nSK)??INF)) { dist.set(nSK, newCost); prev.set(nSK, curSK); pq.push({cost:newCost,key:nKey,eIn:nEin}); }
+    }
+  }
+  return null;
+}
+
 // Returns true iff segments a and b cross inside the hex.
 // a, b: {from, to} where from/to are edge indices 0..5 or 'C'.
 function segmentsCrossInHex(a, b) {
@@ -3664,19 +3813,29 @@ function daysForPath(fullPathKeys, move) {
   const crossingCounts = _riverCrossingPenaltyPerHex(fullPathKeys);
   const last = fullPathKeys.length - 1;
   const perHex = fullPathKeys.map((key, i) => {
-    const m = modifierFor(key);
-    const isOrigin   = i === 0;
-    const isWater    = m === 0;
-    const isInterior = i > 0 && i < last;
-    if (!isOrigin && isWater) waterHexes++;
-    const terrainDays     = (isOrigin || isWater) ? 0 : 1.25 / (move * m);
-    const crossings       = isWater ? 0 : (crossingCounts[i] || 0);
-    const crossingPenalty = crossings * 0.25;
     const hex = state.hexes[key];
-    const hasLake = isInterior && hex && (hex.overlays||[]).some(o => o.type === 'water' && o.size === 'lake');
-    const lakePenalty = hasLake ? 0.25 : 0;
+    const isOrigin   = i === 0;
+    const isInterior = i > 0 && i < last;
+    // Derive entry/exit anchors
+    const [kc, kr] = key.split(',').map(Number);
+    const prevKey = i > 0 ? fullPathKeys[i-1] : null;
+    const nextKey = i < last ? fullPathKeys[i+1] : null;
+    let eIn = 'C', eOut = 'C';
+    if (prevKey) { const [pc,pr] = prevKey.split(',').map(Number); const e = _sharedEdge({col:kc,row:kr},{col:pc,row:pr}); eIn  = e === -1 ? 'C' : e; }
+    if (nextKey) { const [nc,nr] = nextKey.split(',').map(Number); const e = _sharedEdge({col:kc,row:kr},{col:nc,row:nr}); eOut = e === -1 ? 'C' : e; }
+    if (isOrigin) return { key, modifier: terrainModifier(hex), terrainDays: 0, crossingPenalty: 0, crossings: 0, lakePenalty: 0, usedRoadBonus: false, hasRoadNoBonus: false, isImpassable: false, totalDays: 0 };
+    const { daysCost, modifier, usedRoadBonus } = costForHexInPath(hex, eIn, eOut, key, move);
+    const isImpassable = !isFinite(daysCost);
+    if (isImpassable) waterHexes++;
+    const terrainDays     = isImpassable ? 0 : daysCost;
+    const crossings       = isImpassable ? 0 : (crossingCounts[i] || 0);
+    const crossingPenalty = crossings * 0.25;
+    const hasLakeOv = isInterior && hex && (hex.overlays||[]).some(o => o.type === 'water' && o.size === 'lake');
+    const lakePenalty = hasLakeOv ? 0.25 : 0;
+    const roadOv = hex && (hex.overlays||[]).find(o => o.type === 'road');
+    const hasRoadNoBonus = !!(roadOv && !usedRoadBonus && !isImpassable);
     days += terrainDays + crossingPenalty + lakePenalty;
-    return { key, modifier: m, terrainDays, crossingPenalty, crossings, lakePenalty, totalDays: terrainDays + crossingPenalty + lakePenalty };
+    return { key, modifier: isImpassable ? 0 : modifier, terrainDays, crossingPenalty, crossings, lakePenalty, usedRoadBonus, hasRoadNoBonus, isImpassable, totalDays: terrainDays + crossingPenalty + lakePenalty };
   });
   return { days, waterHexes, perHex };
 }
@@ -3695,6 +3854,7 @@ function hideRulerPanel() {
   const p = document.getElementById('ruler-panel'); if (p) p.classList.add('hidden');
   state.ui.rulerHexA = null; state.ui.rulerHexB = null;
   state.ui.rulerOverrides = {};
+  _rulerPath = null; _rulerPathSet = null;
   if (_mapCurMode === 'rulerA' || _mapCurMode === 'rulerB') setMapMode('select');
   _buildMapToolbar(); save(); drawWorld();
 }
@@ -3720,13 +3880,12 @@ function setRulerOverride(key, val) {
   save(); drawWorld(); renderRulerPanel();
 }
 
-function markRouteOnMap() {
+function saveRouteOnMap() {
   const aKey = state.ui.rulerHexA, bKey = state.ui.rulerHexB;
   if (!aKey || !bKey) return;
-  const [aC, aR] = aKey.split(',').map(Number);
-  const [bC, bR] = bKey.split(',').map(Number);
-  const fp = hexLine({ col: aC, row: aR }, { col: bC, row: bR });
-  if (fp.length < 2) { save(); drawWorld(); return; }
+  const move = state.ui.rulerMove || 5;
+  const fp = _rulerPath || _dijkstraPath(aKey, bKey, move);
+  if (!fp || fp.length < 2) { save(); drawWorld(); return; }
   // Build one segment per hex: entry-anchor → exit-anchor.
   // Start hex: C → first-exit. Middle: entry → exit. End hex: entry → C.
   const hexEntry = new Map(); // hexKey -> entry anchor ('C' or 0-5)
@@ -3757,63 +3916,59 @@ function renderRulerPanel() {
   if (!aKey || !bKey) { panel.classList.add('hidden'); return; }
   const [aC, aR] = aKey.split(',').map(Number);
   const [bC, bR] = bKey.split(',').map(Number);
-  const fullPath = hexLine({ col: aC, row: aR }, { col: bC, row: bR });
-  const fullPathKeys = fullPath.map(h => h.col + ',' + h.row);
-  const move = state.ui.rulerMove || 5;
-  const { days, waterHexes, perHex } = daysForPath(fullPathKeys, move);
-  const N = fullPath.length - 1;
   const hexLabel = (col, row) => { const h = state.hexes[col+','+row]; return (h && h.name) ? escHtml(h.name) : '('+col+','+row+')'; };
-  const allWater = waterHexes > 0 && N === waterHexes;
-  const daysStr = allWater ? '—' : (N === 0 ? '0 days' : formatDays(days));
-  const warningHtml = waterHexes > 0
-    ? '<div class="r-warning">&#x26A0; Path crosses ' + waterHexes + ' impassable hex' + (waterHexes>1?'es':'')
-      + '.<br>Days shown exclude impassable hexes.</div>' : '';
-  const rowsHtml = perHex.slice(1).map(({ key, modifier: m, totalDays, crossings, lakePenalty }) => {
-    const [kc, kr] = key.split(',').map(Number);
-    const h = state.hexes[key];
-    const hasRoad = h && h.overlays && h.overlays.some(o => o.type === 'road');
-    const terrainLabel = hasRoad ? 'road' : ((h && h.terrain) || 'unknown');
-    const curOv = (state.ui.rulerOverrides && state.ui.rulerOverrides[key]) || '';
-    const ovSel = (v) => curOv === v ? ' selected' : '';
-    const ovHtml = '<select style="font-size:0.73rem;background:var(--panel-dark);border:1px solid var(--border);color:var(--text);max-width:72px"'
-      + ' onchange="setRulerOverride(\'' + key + '\',this.value)">'
-      + '<option value="auto"' + ovSel('') + '>(auto)</option>'
-      + '<option value="plains"' + ovSel('plains') + '>×1.0</option>'
-      + '<option value="hills"' + ovSel('hills') + '>×0.5</option>'
-      + '<option value="mountain"' + ovSel('mountain') + '>×0.25</option>'
-      + '<option value="impassable"' + ovSel('impassable') + '>block</option>'
-      + '</select>';
-    const riverTag = crossings > 0 ? ' <span style="color:#e8a040;font-size:0.7rem">(+R×' + crossings + ')</span>' : '';
-    const lakeTag  = lakePenalty > 0 ? ' <span style="color:#6ab0d4;font-size:0.7rem">(+L)</span>' : '';
-    return '<tr' + (m === 0 ? ' class="r-water"' : '') + '><td>('+kc+','+kr+')</td><td>'
-      + escHtml(terrainLabel) + '</td><td>' + (m===0?'—':m.toFixed(2))
-      + '</td><td>' + (m===0?'&#x26A0;':totalDays.toFixed(2)) + riverTag + lakeTag
-      + '</td><td>' + ovHtml + '</td></tr>';
-  }).join('');
-  panel.innerHTML = `
-    <div class="r-panel-header">
-      <div class="r-panel-title">Travel Time</div>
-      <button onclick="hideRulerPanel()" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:1.1rem;padding:0;line-height:1">&#x2715;</button>
-    </div>
+  const move = state.ui.rulerMove || 5;
+  const btnStyle = 'background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:1.1rem;padding:0;line-height:1';
+  const header = `<div class="r-panel-header"><div class="r-panel-title">Travel Time</div>
+    <button onclick="hideRulerPanel()" style="${btnStyle}">&#x2715;</button></div>
     <div class="r-row"><span class="r-label">From</span><span class="r-val">${hexLabel(aC, aR)}</span></div>
     <div class="r-row"><span class="r-label">To</span><span class="r-val">${hexLabel(bC, bR)}</span></div>
     <div class="r-row" style="margin-top:8px;align-items:center">
       <span class="r-label">Party Move</span>
       <input type="number" min="1" max="20" value="${move}"
         style="width:50px;background:var(--panel-dark);border:1px solid var(--border);color:var(--text);padding:2px 5px;text-align:center;font-size:0.9rem"
-        oninput="updateRulerMove(this.value)">
-    </div>
-    ${warningHtml}
+        oninput="updateRulerMove(this.value)"></div>`;
+  const fullPath = _dijkstraPath(aKey, bKey, move);
+  if (!fullPath) {
+    _rulerPath = null; _rulerPathSet = null; drawWorld();
+    panel.innerHTML = header + '<div class="r-warning" style="margin-top:8px">&#x26A0; No path found between these hexes.</div>';
+    panel.classList.remove('hidden'); return;
+  }
+  _rulerPath = fullPath;
+  _rulerPathSet = new Set(fullPath.slice(1, -1).map(h => h.col + ',' + h.row));
+  drawWorld();
+  const fullPathKeys = fullPath.map(h => h.col + ',' + h.row);
+  const { days, perHex } = daysForPath(fullPathKeys, move);
+  const N = fullPath.length - 1;
+  const daysStr = N === 0 ? '0 days' : formatDays(days);
+  const rowsHtml = perHex.slice(1).map(({ key, modifier: m, totalDays, crossings, lakePenalty, usedRoadBonus, hasRoadNoBonus, isImpassable }) => {
+    const [kc, kr] = key.split(',').map(Number);
+    const h = state.hexes[key];
+    const terrainLabel = usedRoadBonus ? 'road' : ((h && h.terrain) || 'unknown');
+    const roadBypass = hasRoadNoBonus ? ' <span style="color:var(--text-dim);font-size:0.7rem" title="road bypassed this hex">(road)</span>' : '';
+    const curOv = (state.ui.rulerOverrides && state.ui.rulerOverrides[key]) || '';
+    const ovSel = v => curOv === v ? ' selected' : '';
+    const ovHtml = '<select style="font-size:0.73rem;background:var(--panel-dark);border:1px solid var(--border);color:var(--text);max-width:72px"'
+      + ' onchange="setRulerOverride(\'' + key + '\',this.value)">'
+      + '<option value="auto"' + ovSel('') + '>(auto)</option>'
+      + '<option value="plains"' + ovSel('plains') + '>×1.0</option>'
+      + '<option value="hills"' + ovSel('hills') + '>×0.5</option>'
+      + '<option value="mountain"' + ovSel('mountain') + '>×0.25</option>'
+      + '<option value="impassable"' + ovSel('impassable') + '>block</option></select>';
+    const riverTag = crossings > 0 ? ' <span style="color:#e8a040;font-size:0.7rem">(+R×' + crossings + ')</span>' : '';
+    const lakeTag  = lakePenalty > 0 ? ' <span style="color:#6ab0d4;font-size:0.7rem">(+L)</span>' : '';
+    return '<tr' + (isImpassable ? ' class="r-water"' : '') + '><td>('+kc+','+kr+')</td><td>'
+      + escHtml(terrainLabel) + roadBypass + '</td><td>' + (isImpassable?'—':m.toFixed(2))
+      + '</td><td>' + (isImpassable?'&#x26A0;':totalDays.toFixed(2)) + riverTag + lakeTag
+      + '</td><td>' + ovHtml + '</td></tr>';
+  }).join('');
+  panel.innerHTML = header + `
     <div class="r-row" style="margin-top:6px;border-top:1px solid var(--border);padding-top:6px">
-      <span class="r-label">Distance</span>
-      <span class="r-val">${N} hex${N!==1?"es":""} (${N*5} mi)</span>
+      <span class="r-label">Distance</span><span class="r-val">${N} hex${N!==1?"es":""} (${N*5} mi)</span>
     </div>
-    <div class="r-row">
-      <span class="r-label">Total days</span>
-      <span class="r-val">${daysStr}</span>
-    </div>
-    <button onclick="markRouteOnMap()" style="margin-top:8px;width:100%;padding:5px;background:rgba(160,40,40,0.18);border:1px solid rgba(160,40,40,0.45);color:#c87070;font-family:Cinzel,serif;font-size:0.75rem;letter-spacing:0.06em;cursor:pointer;border-radius:3px">
-      🗺️ Mark route on map
+    <div class="r-row"><span class="r-label">Total days</span><span class="r-val">${daysStr}</span></div>
+    <button onclick="saveRouteOnMap()" style="margin-top:8px;width:100%;padding:5px;background:rgba(160,40,40,0.18);border:1px solid rgba(160,40,40,0.45);color:#c87070;font-family:Cinzel,serif;font-size:0.75rem;letter-spacing:0.06em;cursor:pointer;border-radius:3px">
+      🗺️ Save route on map
     </button>
     <table class="r-table" style="margin-top:10px">
       <thead><tr><th>Hex</th><th>Terrain</th><th>Mod</th><th>Days</th><th>Override</th></tr></thead>
