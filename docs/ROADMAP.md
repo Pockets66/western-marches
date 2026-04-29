@@ -32,7 +32,7 @@
 - Slice 18: Cross-link pass 2 (rumor ↔ pin/hex, NPC ↔ pin, session autocomplete)
 
 ## Planned
-- Slice 19: Narrative-event recorder + map tweaks
+- Slice 19: Map fixes
 - Slice 20: Character sheet Tier 2 (structured advantages/disadvantages/skills)
 - Slice 21: Character sheet Tier 3 (combat, equipment, defenses)
 
