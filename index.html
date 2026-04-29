@@ -3587,14 +3587,93 @@ function modifierFor(hexKey) {
   }
 }
 
-function daysForPath(pathKeys, move) {
-  let days = 0, waterHexes = 0;
-  pathKeys.forEach(key => {
-    const m = modifierFor(key);
-    if (m === 0) { waterHexes++; return; }
-    days += 1.25 / (move * m);
+// Returns true iff segments a and b cross inside the hex.
+// a, b: {from, to} where from/to are edge indices 0..5 or 'C'.
+function segmentsCrossInHex(a, b) {
+  const aC = a.from === 'C' || a.to === 'C';
+  const bC = b.from === 'C' || b.to === 'C';
+  if (aC && bC) return false; // both spokes: meet at center, don't cross
+  if (!aC && !bC) {
+    // edge-to-edge: standard chord interleave on cyclic 0..5
+    const inArc = (x, s, e) => { const L = (e-s+6)%6; return L > 0 && (x-s+6)%6 > 0 && (x-s+6)%6 < L; };
+    return inArc(b.from, a.from, a.to) !== inArc(b.to, a.from, a.to);
+  }
+  // one spoke {C,e}, one edge chord {p,q}
+  const e  = aC ? (a.from === 'C' ? a.to : a.from) : (b.from === 'C' ? b.to : b.from);
+  const ch = aC ? b : a;
+  const cw = (ch.to - ch.from + 6) % 6;
+  if (cw === 0) return false;
+  if (cw === 3) return false; // opposite chord passes through C — spoke shares center endpoint, doesn't cross
+  const inCw = (e - ch.from + 6) % 6 > 0 && (e - ch.from + 6) % 6 < cw;
+  return cw < 3 ? inCw : (!inCw && e !== ch.from && e !== ch.to);
+}
+
+// Merge opposite spoke pairs (e.g. {C,3}+{C,0}) into a single full chord ({3,0}).
+// Avoids counting W→C and C→E as two separate crossings when they form one straight line.
+function _normalizeRiverSegs(segs) {
+  const spokes = segs.filter(s => s.from === 'C' || s.to === 'C');
+  const full   = segs.filter(s => s.from !== 'C' && s.to !== 'C');
+  const used = new Set();
+  const result = [...full];
+  for (let i = 0; i < spokes.length; i++) {
+    if (used.has(i)) continue;
+    const ei = spokes[i].from === 'C' ? spokes[i].to : spokes[i].from;
+    let paired = false;
+    for (let j = i + 1; j < spokes.length; j++) {
+      if (used.has(j)) continue;
+      const ej = spokes[j].from === 'C' ? spokes[j].to : spokes[j].from;
+      if ((ei + 3) % 6 === ej) { result.push({ from: ei, to: ej }); used.add(i); used.add(j); paired = true; break; }
+    }
+    if (!paired) result.push(spokes[i]);
+  }
+  return result;
+}
+
+// Per-hex crossing counts for the full path (including origin at index 0).
+// Bridge rule: a road segment that crosses the same river segment suppresses the penalty.
+function _riverCrossingPenaltyPerHex(fullPathKeys) {
+  return fullPathKeys.map((key, i) => {
+    const hex = state.hexes[key];
+    if (!hex) return 0;
+    const riverOv = (hex.overlays||[]).find(o => o.type === 'river');
+    const rawRiverSegs = riverOv ? (riverOv.segments||[]) : [];
+    if (!rawRiverSegs.length) return 0;
+    const riverSegs = _normalizeRiverSegs(rawRiverSegs);
+    const roadOv = (hex.overlays||[]).find(o => o.type === 'road');
+    const roadSegs = roadOv ? (roadOv.segments||[]) : [];
+    const [kc, kr] = key.split(',').map(Number);
+    const prevKey = i > 0 ? fullPathKeys[i-1] : null;
+    const nextKey = i < fullPathKeys.length-1 ? fullPathKeys[i+1] : null;
+    let entryA = 'C', exitA = 'C';
+    if (prevKey) { const [pc,pr] = prevKey.split(',').map(Number); const e = _sharedEdge({col:kc,row:kr},{col:pc,row:pr}); entryA = e === -1 ? 'C' : e; }
+    if (nextKey) { const [nc,nr] = nextKey.split(',').map(Number); const e = _sharedEdge({col:kc,row:kr},{col:nc,row:nr}); exitA  = e === -1 ? 'C' : e; }
+    const routeSeg = { from: entryA, to: exitA };
+    let crossings = 0;
+    for (const riv of riverSegs) {
+      if (!segmentsCrossInHex(routeSeg, riv)) continue;
+      const bridged = roadSegs.some(rd => segmentsCrossInHex(rd, riv));
+      if (!bridged) crossings++;
+    }
+    return crossings;
   });
-  return { days, waterHexes };
+}
+
+// fullPathKeys includes the origin hex at index 0 (entry days = 0 for origin).
+function daysForPath(fullPathKeys, move) {
+  let days = 0, waterHexes = 0;
+  const crossingCounts = _riverCrossingPenaltyPerHex(fullPathKeys);
+  const perHex = fullPathKeys.map((key, i) => {
+    const m = modifierFor(key);
+    const isOrigin = i === 0;
+    const isWater  = m === 0;
+    if (!isOrigin && isWater) waterHexes++;
+    const terrainDays    = (isOrigin || isWater) ? 0 : 1.25 / (move * m);
+    const crossings      = isWater ? 0 : (crossingCounts[i] || 0);
+    const crossingPenalty = crossings * 0.25;
+    days += terrainDays + crossingPenalty;
+    return { key, modifier: m, terrainDays, crossingPenalty, crossings, totalDays: terrainDays + crossingPenalty };
+  });
+  return { days, waterHexes, perHex };
 }
 
 function toggleRulerMode() {
@@ -3674,36 +3753,35 @@ function renderRulerPanel() {
   const [aC, aR] = aKey.split(',').map(Number);
   const [bC, bR] = bKey.split(',').map(Number);
   const fullPath = hexLine({ col: aC, row: aR }, { col: bC, row: bR });
-  const pathKeys = fullPath.slice(1).map(h => h.col + ',' + h.row);
+  const fullPathKeys = fullPath.map(h => h.col + ',' + h.row);
   const move = state.ui.rulerMove || 5;
-  const { days, waterHexes } = daysForPath(pathKeys, move);
+  const { days, waterHexes, perHex } = daysForPath(fullPathKeys, move);
   const N = fullPath.length - 1;
   const hexLabel = (col, row) => { const h = state.hexes[col+','+row]; return (h && h.name) ? escHtml(h.name) : '('+col+','+row+')'; };
-  const allWater = waterHexes > 0 && pathKeys.length === waterHexes;
-  const daysStr = allWater ? '—' : (pathKeys.length === 0 ? '0 days' : formatDays(days));
+  const allWater = waterHexes > 0 && N === waterHexes;
+  const daysStr = allWater ? '—' : (N === 0 ? '0 days' : formatDays(days));
   const warningHtml = waterHexes > 0
     ? '<div class="r-warning">&#x26A0; Path crosses ' + waterHexes + ' impassable hex' + (waterHexes>1?'es':'')
       + '.<br>Days shown exclude impassable hexes.</div>' : '';
-  const rowsHtml = pathKeys.map(key => {
+  const rowsHtml = perHex.slice(1).map(({ key, modifier: m, totalDays, crossings }) => {
     const [kc, kr] = key.split(',').map(Number);
     const h = state.hexes[key];
     const hasRoad = h && h.overlays && h.overlays.some(o => o.type === 'road');
     const terrainLabel = hasRoad ? 'road' : ((h && h.terrain) || 'unknown');
-    const m = modifierFor(key);
-    const hexDays = m === 0 ? null : 1.25 / (move * m);
     const curOv = (state.ui.rulerOverrides && state.ui.rulerOverrides[key]) || '';
     const ovSel = (v) => curOv === v ? ' selected' : '';
     const ovHtml = '<select style="font-size:0.73rem;background:var(--panel-dark);border:1px solid var(--border);color:var(--text);max-width:72px"'
-      + ' onchange="setRulerOverride(\'' + key + '\',this.value)">'  
+      + ' onchange="setRulerOverride(\'' + key + '\',this.value)">'
       + '<option value="auto"' + ovSel('') + '>(auto)</option>'
       + '<option value="plains"' + ovSel('plains') + '>×1.0</option>'
       + '<option value="hills"' + ovSel('hills') + '>×0.5</option>'
       + '<option value="mountain"' + ovSel('mountain') + '>×0.25</option>'
       + '<option value="impassable"' + ovSel('impassable') + '>block</option>'
       + '</select>';
+    const riverTag = crossings > 0 ? ' <span style="color:#e8a040;font-size:0.7rem">(+R×' + crossings + ')</span>' : '';
     return '<tr' + (m === 0 ? ' class="r-water"' : '') + '><td>('+kc+','+kr+')</td><td>'
       + escHtml(terrainLabel) + '</td><td>' + (m===0?'—':m.toFixed(2))
-      + '</td><td>' + (hexDays===null?'&#x26A0;':hexDays.toFixed(2))
+      + '</td><td>' + (m===0?'&#x26A0;':totalDays.toFixed(2)) + riverTag
       + '</td><td>' + ovHtml + '</td></tr>';
   }).join('');
   panel.innerHTML = `
@@ -7026,6 +7104,31 @@ function _evtToggleKnown() {
 }
 
 // ── Dev test harness (slice 14.10 Stage 1) ───────────────────────────────────
+
+window._wmCrossTest = {
+  segmentsCrossInHex,
+  run() {
+    const cases = [
+      ['E×E {1,4}×{0,3} → cross',           {from:1,to:4},{from:0,to:3}, true ],
+      ['E×E {0,3}×{0,3} → no cross (same)', {from:0,to:3},{from:0,to:3}, false],
+      ['E×E {1,4}×{1,4} → no cross (same)', {from:1,to:4},{from:1,to:4}, false],
+      ['E×E {0,2}×{3,5} → no cross',        {from:0,to:2},{from:3,to:5}, false],
+      ['E×E {0,2}×{1,4} → cross',           {from:0,to:2},{from:1,to:4}, true ],
+      ['Spoke {C,0}×{1,5} → cross',               {from:'C',to:0},{from:1,to:5}, true ],
+      ['Spoke {C,0}×{2,4} → no cross',            {from:'C',to:0},{from:2,to:4}, false],
+      ['Spoke {C,0}×{C,2} → no cross (2 spokes)', {from:'C',to:0},{from:'C',to:2}, false],
+      ['Spoke {C,2}×{1,4} → no cross (opp chord)',{from:'C',to:2},{from:1,to:4}, false],
+    ];
+    let ok = 0;
+    cases.forEach(([desc, a, b, exp]) => {
+      const got = segmentsCrossInHex(a, b);
+      const pass = got === exp;
+      console[pass?'log':'warn']((pass?'✓':'✗')+' '+desc+' → '+got);
+      if (pass) ok++;
+    });
+    console.log(ok+'/'+cases.length+' passed');
+  }
+};
 
 window._wmGraphTest = {
   buildOverlayGraph,
