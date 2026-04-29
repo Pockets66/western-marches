@@ -24,15 +24,14 @@
 - Slice 14.11: Map undo system — snapshot-based, in-memory, 50-entry cap, drag = one unit
 - Slice 15: Local maps + pins (schema v14) — pin CRUD, world-map dots, local map modal, image upload, drag/edit, cascades
 - Slice 16: Quests tab — Active/Archive sub-tabs, status/urgency, all field editors, event history readout; cross-link UI pending slice 18
+- Slice 17: Cross-link pass 1 (pin ↔ faction, pin ↔ NPCs)
 
 ## Deferred
 
 ## In progress
-
+- Slice 18: Cross-link pass 2 (rumor ↔ pin/hex, NPC ↔ pin, session autocomplete)
 
 ## Planned
-- Slice 17: Cross-link pass 1 (pin ↔ faction, pin ↔ NPCs)
-- Slice 18: Cross-link pass 2 (rumor ↔ pin/hex, NPC ↔ pin, session autocomplete)
 - Slice 19: Narrative-event recorder + map tweaks
 - Slice 20: Character sheet Tier 2 (structured advantages/disadvantages/skills)
 - Slice 21: Character sheet Tier 3 (combat, equipment, defenses)

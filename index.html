@@ -4260,6 +4260,34 @@ function _rumorCard(r, isArchived) {
       return `<option value="${n.id}"${r.npcSourceId===n.id?' selected':''}>${escHtml(fn ? n.name+' ('+fn.name+')' : n.name)}</option>`;
     }).join('');
 
+  const rPinOpts = `<option value="">No pin</option>` +
+    (state.pins || []).map(p =>
+      `<option value="${p.id}"${r.pinId===p.id?' selected':''}>${escHtml((p.name||'(unnamed)')+' ('+p.hexKey+')')}</option>`
+    ).join('');
+
+  const rHexOpts = `<option value="">No hex</option>` +
+    Object.entries(state.hexes || {})
+      .filter(([,h]) => h.name)
+      .sort(([,a],[,b]) => a.name.localeCompare(b.name))
+      .map(([k,h]) => `<option value="${k}"${r.hexKey===k?' selected':''}>${escHtml(h.name)} (${k})</option>`)
+      .join('');
+
+  const cSel = 'background:rgba(0,0,0,0.15);border:1px solid var(--border);color:var(--text-dim);font-family:\'Crimson Pro\',Georgia,serif;font-size:0.8rem;padding:2px 4px;width:100%;cursor:pointer';
+
+  let locationTag = '';
+  if (r.pinId) {
+    const pin = (state.pins||[]).find(p => p.id === r.pinId);
+    if (pin) locationTag = `<span onclick="openLocalMapAtPin('${pin.id}')"
+      style="font-size:0.72rem;color:var(--gold-dim);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%"
+      title="${escHtml((pin.name||'(unnamed)')+' — '+pin.hexKey)}">📍 ${escHtml(pin.name||'(unnamed)')}</span>`;
+  } else if (r.hexKey) {
+    const hex = state.hexes[r.hexKey];
+    const lbl = (hex && hex.name) ? hex.name : r.hexKey;
+    locationTag = `<span onclick="goToHex('${r.hexKey}')"
+      style="font-size:0.72rem;color:var(--gold-dim);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%"
+      title="${escHtml(lbl+' — '+r.hexKey)}">⬡ ${escHtml(lbl)}</span>`;
+  }
+
   const archiveBtn = isArchived
     ? `<button class="rumor-archive-btn unarchive" onclick="unarchiveRumor('${r.id}')">Unarchive</button>`
     : `<button class="rumor-archive-btn" onclick="archiveRumor('${r.id}')">Archive</button>`;
@@ -4275,6 +4303,12 @@ function _rumorCard(r, isArchived) {
     <div class="rumor-links">
       <select class="rumor-select" onchange="updateRumorField('${r.id}','factionId',this.value||null)">${factionOpts}</select>
       <select class="rumor-select" onchange="updateRumorField('${r.id}','npcSourceId',this.value||null)">${npcOpts}</select>
+      <div style="display:flex;gap:4px">
+        <select style="${cSel};flex:1" onchange="setRumorPin('${r.id}',this.value)">${rPinOpts}</select>
+        <select style="${cSel};flex:1" onchange="setRumorHex('${r.id}',this.value)">${rHexOpts}</select>
+      </div>
+      <div style="font-size:0.7rem;color:var(--text-muted);font-style:italic">Setting one location clears the other.</div>
+      ${locationTag ? `<div>${locationTag}</div>` : ''}
     </div>
     <div class="rumor-footer">
       <button class="rumor-player-pill${r.playerKnown?' on':''}" onclick="toggleRumorKnown('${r.id}')">
@@ -4360,6 +4394,27 @@ function setRumorStatus(id, status) {
 function setRumorUrgency(id, urgency) {
   const r = state.rumors.find(r => r.id === id); if (!r) return;
   r.urgency = urgency; save(); renderRumorsActive();
+}
+
+function setRumorPin(id, val) {
+  const r = state.rumors.find(r => r.id === id); if (!r) return;
+  r.pinId  = val || null;
+  if (r.pinId) r.hexKey = null;
+  save(); renderRumorsActive(); renderRumorsArchived();
+}
+
+function setRumorHex(id, val) {
+  const r = state.rumors.find(r => r.id === id); if (!r) return;
+  r.hexKey = val || null;
+  if (r.hexKey) r.pinId = null;
+  save(); renderRumorsActive(); renderRumorsArchived();
+}
+
+function goToHex(hexKey) {
+  const [c, ro] = hexKey.split(',').map(Number);
+  _mapSelHex = { col: c, row: ro };
+  switchTab('map');
+  renderMapInfo(c, ro);
 }
 
 function toggleRumorKnown(id) {
