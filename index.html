@@ -1701,6 +1701,13 @@ function switchTab(tab) {
   if (tab === 'map') {
     renderMapPanel();
   }
+  if (tab === 'factions') {
+    renderFactionSidebar();
+    if (state.ui.activeFactionId) {
+      const f = state.factions.find(f => f.id === state.ui.activeFactionId);
+      if (f) renderFactionDetail(f); else renderFactionDetail(null);
+    }
+  }
   if (tab === 'rumors') {
     renderRumorsActive();
     renderRumorsArchived();
@@ -3074,6 +3081,7 @@ function _renderPinSection(c, r) {
             <select style="${iSel};flex:1" onchange="setPinFaction('${pin.id}',this.value)">${factionOpts}</select>
             ${facForDot ? `<div class="faction-dot" style="background:${escHtml(facForDot.color)}"></div>` : ''}
           </div>
+          ${facForDot ? `<div style="font-size:0.78rem"><span style="color:${escHtml(facForDot.color)};cursor:pointer;text-decoration:underline;text-decoration-style:dotted" onclick="_navFromPin('factions',{activeFactionId:'${facForDot.id}'})">→ ${escHtml(facForDot.name)}</span></div>` : ''}
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;font-size:0.82rem">
             <input type="checkbox" ${pin.discovered ? 'checked' : ''}
               onchange="setPinField('${pin.id}','discovered',this.checked,${c},${r})">
@@ -3901,6 +3909,7 @@ function _updateLmPinEditor() {
       <select style="${iSel};flex:1" onchange="setPinFaction('${pin.id}',this.value)">${factionOpts}</select>
       ${facForDot ? `<div class="faction-dot" style="background:${escHtml(facForDot.color)}"></div>` : ''}
     </div>
+    ${facForDot ? `<div style="font-size:0.78rem"><span style="color:${escHtml(facForDot.color)};cursor:pointer;text-decoration:underline;text-decoration-style:dotted" onclick="_navFromPin('factions',{activeFactionId:'${facForDot.id}'})">→ ${escHtml(facForDot.name)}</span></div>` : ''}
     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;font-size:0.82rem">
       <input type="checkbox" ${pin.discovered ? 'checked' : ''}
         onchange="lmSetPinField('${pin.id}','discovered',this.checked)">
@@ -5496,6 +5505,12 @@ function goToTab(tabName, contextUpdates) {
   switchTab(tabName);
 }
 
+// Navigating away from a pin editor closes the local map modal first.
+function _navFromPin(tabName, contextUpdates) {
+  closeLocalMap();
+  goToTab(tabName, contextUpdates);
+}
+
 function _afterPinRoster(pinId) {
   const pin = (state.pins||[]).find(p => p.id === pinId); if (!pin) return;
   if (_mapSelHex && _mapSelHex.col + ',' + _mapSelHex.row === pin.hexKey)
@@ -5543,7 +5558,8 @@ function _renderPinNpcRoster(pin) {
     const roleHtml = n.role ? `<span style="color:var(--text-muted);font-size:0.78rem"> · ${escHtml(n.role)}</span>` : '';
     return `<div style="display:flex;align-items:center;gap:6px;padding:2px 0">
       ${pip}
-      <span style="flex:1;font-size:0.82rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nameHtml}${roleHtml}</span>
+      <span style="flex:1;font-size:0.82rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer"
+        onclick="_navFromPin('npcs',{activeNpcId:'${n.id}'})" title="Open NPC">${nameHtml}${roleHtml}</span>
       <button style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:0.9rem;padding:0 2px;line-height:1"
         onclick="removeNpcFromPin('${n.id}')" title="Remove from pin">✕</button>
     </div>`;
