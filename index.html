@@ -1628,6 +1628,85 @@ let _mapDragLastAnchor = null;  // anchor ('C' | 0-5) at the tail of the last pa
 let _mapDragOccurred   = false; // did the mousedown become an actual drag stroke?
 let _mapDragType       = null;  // overlay type being painted ('road'|'river'|'route')
 
+// ── Map undo/redo stack ───────────────────────────────────────────────────────
+let _mapUndoStack = [];   // each entry: JSON string of { mapMeta, hexes }
+let _mapRedoStack = [];
+const _MAP_UNDO_CAP = 50;
+let _mapNameNoteTimer   = null;
+let _mapNameNoteLastKey = null;
+let _mapUndoTxnSnap     = null;  // non-null when a drag transaction is open
+
+function _mapSnapshot() {
+  return JSON.stringify({ mapMeta: state.mapMeta, hexes: state.hexes });
+}
+
+function _mapRestoreSnapshot(snap) {
+  const d = JSON.parse(snap);
+  state.mapMeta = d.mapMeta;
+  state.hexes   = d.hexes;
+  _invalidateOverlayCache();
+  save();
+  drawWorld();
+  if (_mapSelHex) {
+    const k = _mapSelHex.col + ',' + _mapSelHex.row;
+    if (state.hexes[k]) renderMapInfo(_mapSelHex.col, _mapSelHex.row);
+    else { _mapSelHex = null; const p = document.getElementById('map-info-panel'); if (p) p.innerHTML = ''; }
+  }
+}
+
+function _refreshUndoButtons() {
+  const u = document.getElementById('map-undo-btn');
+  const r = document.getElementById('map-redo-btn');
+  if (u) u.disabled = _mapUndoStack.length === 0;
+  if (r) r.disabled = _mapRedoStack.length === 0;
+}
+
+function _pushMapUndo() {
+  if (_mapUndoStack.length >= _MAP_UNDO_CAP) _mapUndoStack.shift();
+  _mapUndoStack.push(_mapSnapshot());
+  _mapRedoStack = [];
+  _refreshUndoButtons();
+}
+
+function mapUndo() {
+  if (!_mapUndoStack.length) return;
+  if (_mapRedoStack.length >= _MAP_UNDO_CAP) _mapRedoStack.shift();
+  _mapRedoStack.push(_mapSnapshot());
+  _mapRestoreSnapshot(_mapUndoStack.pop());
+  _refreshUndoButtons();
+  _flashUndoStatus('UNDO');
+}
+
+function mapRedo() {
+  if (!_mapRedoStack.length) return;
+  if (_mapUndoStack.length >= _MAP_UNDO_CAP) _mapUndoStack.shift();
+  _mapUndoStack.push(_mapSnapshot());
+  _mapRestoreSnapshot(_mapRedoStack.pop());
+  _refreshUndoButtons();
+  _flashUndoStatus('REDO');
+}
+
+function _beginUndoTxn() {
+  if (_mapUndoTxnSnap === null) _mapUndoTxnSnap = _mapSnapshot();
+}
+function _commitUndoTxn(mutated) {
+  if (_mapUndoTxnSnap !== null && mutated) {
+    if (_mapUndoStack.length >= _MAP_UNDO_CAP) _mapUndoStack.shift();
+    _mapUndoStack.push(_mapUndoTxnSnap);
+    _mapRedoStack = [];
+    _refreshUndoButtons();
+  }
+  _mapUndoTxnSnap = null;
+}
+function _abortUndoTxn() { _mapUndoTxnSnap = null; }
+
+function _flashUndoStatus(label) {
+  const sb = document.getElementById('map-statusbar'); if (!sb) return;
+  const prev = sb.textContent;
+  sb.textContent = label;
+  setTimeout(() => { if (sb.textContent === label) updateMapStatus(); }, 600);
+}
+
 function _scheduleRedraw() {
   if (_mapRafId) return;
   _mapRafId = requestAnimationFrame(() => { _mapRafId = null; drawWorld(); });
@@ -2005,9 +2084,12 @@ function _renderNetworkType(ctx, type, graph, runs) {
     });
   }
 
-  // Render splines
+  // Render splines + collect per-hex spline midpoints for flow arrows (rivers only)
   if (type === 'route') ctx.setLineDash([5, 4]); else ctx.setLineDash([]);
   ctx.lineWidth = typeWidth[type] || 2;
+
+  // hexArrowData: hexKey → {x, y, dx, dy} — populated during spline pass, drawn after
+  const hexArrowData = type === 'river' ? new Map() : null;
 
   renderList.forEach(nodeKeys => {
     // Dedupe consecutive waypoints at the same world position (cross-hex shared edge → two nodes)
@@ -2029,7 +2111,7 @@ function _renderNetworkType(ctx, type, graph, runs) {
         color = roadColors[ov ? ov.surface : 'dirt'] || '#8b6f47';
       } else { color = '#8b6f47'; }
     }
-    // Split at water-terrain/water-overlay center nodes
+    // Split at water-terrain center nodes
     const subPaths = [[]];
     wps.forEach(wp => {
       if (wp.anchor === 'C' && isWaterTerrain(wp.col, wp.row)) {
@@ -2046,6 +2128,35 @@ function _renderNetworkType(ctx, type, graph, runs) {
       for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
       ctx.stroke();
     });
+
+    // Collect flow arrow positions: one per hex, midpoint sampled on the actual spline
+    if (hexArrowData) {
+      for (let i = 0; i < wps.length - 1; i++) {
+        const w0 = wps[i], w1 = wps[i + 1];
+        // Attribute segment to the "destination" hex (w1's hex if crossing, shared hex otherwise)
+        const hcol = (w0.col !== w1.col || w0.row !== w1.row) ? w1.col : w0.col;
+        const hrow = (w0.col !== w1.col || w0.row !== w1.row) ? w1.row : w0.row;
+        const hk = `${hcol},${hrow}`;
+        if (hexArrowData.has(hk)) continue;
+        const hex = state.hexes[hk];
+        if (!hex || isWaterTerrain(hcol, hrow)) continue;
+        if ((hex.overlays || []).some(o => o.type === 'water')) continue;
+        const ov = (hex.overlays || []).find(o => o.type === 'river');
+        const flowSeg = ov && (ov.segments || []).find(s => s.flow);
+        if (!flowSeg) continue;
+        // Context points for centripetal CR evaluation at t=0.5 between w0 and w1
+        const c0 = i > 0            ? wps[i - 1] : { x: 2*w0.x - w1.x, y: 2*w0.y - w1.y };
+        const c1 = i + 2 < wps.length ? wps[i + 2] : { x: 2*w1.x - w0.x, y: 2*w1.y - w0.y };
+        // catmullRomPts([c0,w0,w1,c1], 2) → index 3 is t=0.5 of the w0→w1 segment
+        const mid = catmullRomPts([c0, w0, w1, c1], 2)[3];
+        if (!mid) continue;
+        const pA = anchorPointWithOffset(hcol, hrow, flowSeg.from, 'river');
+        const pB = anchorPointWithOffset(hcol, hrow, flowSeg.to,   'river');
+        let dx = pB.x - pA.x, dy = pB.y - pA.y;
+        if (flowSeg.flow === 'toFrom') { dx = -dx; dy = -dy; }
+        hexArrowData.set(hk, { x: mid.x, y: mid.y, dx, dy });
+      }
+    }
   });
   ctx.setLineDash([]);
 
@@ -2064,23 +2175,10 @@ function _renderNetworkType(ctx, type, graph, runs) {
     });
   });
 
-  // Flow arrows (rivers only) — one per run terminal, exactly on the spline endpoint
-  if (type === 'river') {
-    runs.forEach(run => {
-      if (run.length < 2) return;
-      [[run[0], run[1]], [run[run.length - 1], run[run.length - 2]]].forEach(([k, adjK]) => {
-        if (deg(k) !== 1) return;
-        const nd = graph.nodes.get(k);
-        if (isWaterTerrain(nd.col, nd.row)) return;
-        const ie = graph.edges.find(e => e.segment && (e.a === k || e.b === k));
-        if (!ie || !ie.segment.flow) return;
-        const wp = nodeWp(k), adjWp = nodeWp(adjK);
-        const kIsFrom = ie.a === k;
-        // isInflow: water arrives at this terminal (it is the downstream end)
-        const isInflow = (kIsFrom && ie.segment.flow === 'toFrom') || (!kIsFrom && ie.segment.flow === 'fromTo');
-        const dx = adjWp.x - wp.x, dy = adjWp.y - wp.y;
-        _drawArrowhead(ctx, wp.x, wp.y, isInflow ? dx : -dx, isInflow ? dy : -dy, 6, '#2d5a85');
-      });
+  // Draw flow arrows — positions sampled from the actual spline, guaranteed on-curve
+  if (hexArrowData) {
+    hexArrowData.forEach(({ x, y, dx, dy }) => {
+      _drawArrowhead(ctx, x, y, dx, dy, 6, '#2d5a85');
     });
   }
 }
@@ -2354,8 +2452,11 @@ function _buildMapToolbar() {
     <button class="map-tool-btn${_mapCurMode === 'rulerA' || _mapCurMode === 'rulerB' ? ' active' : ''}" onclick="toggleRulerMode()">🧮 Travel</button>${sep}
     <button class="map-action-btn" onclick="openMapSettings()">Resize Map</button>
     <button class="map-action-btn" onclick="exportMap()">Export</button>
-    <button class="map-action-btn" onclick="importMap()">Import</button>
+    <button class="map-action-btn" onclick="importMap()">Import</button>${sep}
+    <button class="map-action-btn" id="map-undo-btn" onclick="mapUndo()" disabled title="Undo (Ctrl+Z)">↩ Undo</button>
+    <button class="map-action-btn" id="map-redo-btn" onclick="mapRedo()" disabled title="Redo (Ctrl+Shift+Z)">↪ Redo</button>
   </div>`;
+  _refreshUndoButtons();
 }
 
 function setMapTerrain(t) {
@@ -2374,9 +2475,9 @@ function setMapMode(mode) {
 
 function applyMapMode(c, r) {
   const hex = getHex(c, r);
-  if      (_mapCurMode === 'paint')    { hex.terrain = _mapCurTerrain; _invalidateOverlayCache(); }
-  else if (_mapCurMode === 'erase')    { hex.terrain = 'unknown'; hex.note = ''; hex.explored = false; hex.name = ''; _invalidateOverlayCache(); }
-  else if (_mapCurMode === 'explored') { if (hex.terrain === 'unknown') return; hex.explored = _mapExploreIntent; }
+  if      (_mapCurMode === 'paint')    { _pushMapUndo(); hex.terrain = _mapCurTerrain; _invalidateOverlayCache(); }
+  else if (_mapCurMode === 'erase')    { _pushMapUndo(); hex.terrain = 'unknown'; hex.note = ''; hex.explored = false; hex.name = ''; _invalidateOverlayCache(); }
+  else if (_mapCurMode === 'explored') { if (hex.terrain === 'unknown') return; _pushMapUndo(); hex.explored = _mapExploreIntent; }
   else if (_mapCurMode === 'select')   { drawWorld(); renderMapInfo(c, r); return; }
   save();
   _scheduleRedraw();
@@ -2427,10 +2528,11 @@ function _addOverlaySegment(hex, type, from, to, flow) {
     hex.overlays.push(ov);
   }
   if (!Array.isArray(ov.segments)) ov.segments = [];
-  if (ov.segments.some(s => (s.from===from&&s.to===to)||(s.from===to&&s.to===from))) return;
+  if (ov.segments.some(s => (s.from===from&&s.to===to)||(s.from===to&&s.to===from))) return false;
   const seg = { from, to };
   if (type === 'river' && flow !== undefined && flow !== null) seg.flow = flow;
   ov.segments.push(seg);
+  return true;
 }
 
 // Remove a specific segment (unordered match) from an overlay.
@@ -2505,11 +2607,13 @@ function _initMapEvents() {
     const h = pxToHex(x, y);
     if (!h) return;
     if (_mapCurMode === 'paintRoad' || _mapCurMode === 'paintRiver') {
+      _beginUndoTxn();
       _mapDragLastHex = h;
       _mapDragLastAnchor = _nearestDragAnchor(h.col, h.row, x, y);
       _mapDragOccurred = false;
       _mapDragType = _mapCurMode === 'paintRoad' ? 'road' : 'river';
     } else if (_mapCurMode === 'eraseRoad' || _mapCurMode === 'eraseRiver' || _mapCurMode === 'eraseRoute') {
+      _beginUndoTxn();
       _mapDragLastHex = h;
       if (e.shiftKey) { _eraseSingleSegmentAt(h.col, h.row, x, y); }
       else { _eraseOverlay(h.col, h.row); }
@@ -2596,16 +2700,22 @@ function _initMapEvents() {
 
   function _finishOverlayDrag(wasMouseUp) {
     if (_mapIsDrag && _isOverlayMode()) {
-      if (wasMouseUp && !_mapDragOccurred && _mapDragLastHex &&
-          (_mapCurMode === 'paintRoad' || _mapCurMode === 'paintRiver')) {
-        // Click-paint: add stub from C to nearest edge
-        const T = _mapDragType;
-        const nearEdge = _nearestEdgeAnchor(_mapDragLastHex.col, _mapDragLastHex.row, _mapLastClickPx, _mapLastClickPy);
-        const snapped = _snapAnchor(_mapDragLastHex.col, _mapDragLastHex.row, T, nearEdge);
-        _addOverlaySegment(getHex(_mapDragLastHex.col, _mapDragLastHex.row), T, 'C', snapped, null);
-        _invalidateOverlayCache();
-        _scheduleRedraw();
+      let mutated = false;
+      if (_mapCurMode === 'paintRoad' || _mapCurMode === 'paintRiver') {
+        if (_mapDragOccurred) {
+          mutated = true;
+        } else if (wasMouseUp && _mapDragLastHex) {
+          // Click-paint: add stub from C to nearest edge
+          const T = _mapDragType;
+          const nearEdge = _nearestEdgeAnchor(_mapDragLastHex.col, _mapDragLastHex.row, _mapLastClickPx, _mapLastClickPy);
+          const snapped = _snapAnchor(_mapDragLastHex.col, _mapDragLastHex.row, T, nearEdge);
+          mutated = !!_addOverlaySegment(getHex(_mapDragLastHex.col, _mapDragLastHex.row), T, 'C', snapped, null);
+          if (mutated) { _invalidateOverlayCache(); _scheduleRedraw(); }
+        }
+      } else {
+        mutated = true; // erase modes: always count
       }
+      if (mutated) _commitUndoTxn(true); else _abortUndoTxn();
       save();
     }
     _mapIsDrag = false; _mapDragLastHex = null; _mapDragLastAnchor = null;
@@ -2706,31 +2816,26 @@ function _renderOverlayEditor(c, r, hex) {
 function segEditorAddSeg(c, r, T) {
   const hex = getHex(c, r);
   if (!Array.isArray(hex.overlays)) hex.overlays = [];
-  let ov = hex.overlays.find(o => o.type === T);
-  if (!ov) {
-    ov = { type: T, segments: [] };
-    if (T === 'road') ov.surface = 'dirt';
-    hex.overlays.push(ov);
+  const existOv = hex.overlays.find(o => o.type === T);
+  const existSegs = existOv ? (existOv.segments || []) : [];
+  let newSeg = null;
+  for (let to = 0; to <= 5; to++) {
+    const dup = existSegs.some(s => (s.from==='C'&&s.to===to)||(s.from===to&&s.to==='C'));
+    if (!dup) { newSeg = { from: 'C', to }; if (T === 'river') newSeg.flow = null; break; }
   }
+  if (!newSeg) return; // all 6 C↔edge combos already exist
+  _pushMapUndo();
+  let ov = existOv;
+  if (!ov) { ov = { type: T, segments: [] }; if (T === 'road') ov.surface = 'dirt'; hex.overlays.push(ov); }
   if (!Array.isArray(ov.segments)) ov.segments = [];
-  // Find a non-duplicate default anchor pair
-  let added = false;
-  for (let to = 0; to <= 5 && !added; to++) {
-    const dup = ov.segments.some(s => (s.from==='C'&&s.to===to)||(s.from===to&&s.to==='C'));
-    if (!dup) {
-      const seg = { from: 'C', to };
-      if (T === 'river') seg.flow = null;
-      ov.segments.push(seg);
-      added = true;
-    }
-  }
-  if (!added) return; // all 6 C↔edge combos already exist
+  ov.segments.push(newSeg);
   _invalidateOverlayCache(); save(); renderMapInfo(c, r); drawWorld();
 }
 
 function segEditorRemoveSeg(c, r, T, segIdx) {
   const hex = getHex(c, r);
   const ov = (hex.overlays || []).find(o => o.type === T); if (!ov) return;
+  _pushMapUndo();
   ov.segments = (ov.segments || []).filter((_, i) => i !== segIdx);
   if (!ov.segments.length) hex.overlays = hex.overlays.filter(o => o !== ov);
   _invalidateOverlayCache(); save(); renderMapInfo(c, r); drawWorld();
@@ -2745,6 +2850,7 @@ function segEditorSetFrom(c, r, T, segIdx, val) {
   const anchor = _parseAnchor(val);
   if (anchor === seg.to) return; // self-loop — reject, let element revert on next render
   if (ov.segments.some((s,i) => i!==segIdx && ((s.from===anchor&&s.to===seg.to)||(s.from===seg.to&&s.to===anchor)))) return;
+  _pushMapUndo();
   seg.from = anchor;
   _invalidateOverlayCache(); save(); renderMapInfo(c, r); drawWorld();
 }
@@ -2756,6 +2862,7 @@ function segEditorSetTo(c, r, T, segIdx, val) {
   const anchor = _parseAnchor(val);
   if (anchor === seg.from) return;
   if (ov.segments.some((s,i) => i!==segIdx && ((s.from===seg.from&&s.to===anchor)||(s.from===anchor&&s.to===seg.from)))) return;
+  _pushMapUndo();
   seg.to = anchor;
   _invalidateOverlayCache(); save(); renderMapInfo(c, r); drawWorld();
 }
@@ -2764,6 +2871,7 @@ function segEditorSetFlow(c, r, segIdx, val) {
   const hex = getHex(c, r);
   const ov = (hex.overlays || []).find(o => o.type === 'river'); if (!ov) return;
   const seg = (ov.segments || [])[segIdx]; if (!seg) return;
+  _pushMapUndo();
   seg.flow = val || null;
   _invalidateOverlayCache(); save(); renderMapInfo(c, r); drawWorld();
 }
@@ -2796,6 +2904,7 @@ function segEditorSyncFlow(c, r) {
   if (!srcSegs.length) { alert('Set flow on at least one segment first.'); return; }
 
   if (!confirm(`Sync flow to ${nullSegs.length} connected segment${nullSegs.length>1?'s':''}?`)) return;
+  _pushMapUndo();
 
   // waterArrivesAt: node keys where water is arriving (i.e., it is the downstream end)
   const waterArrivesAt = new Set();
@@ -2853,13 +2962,13 @@ function renderMapInfo(c, r) {
     <div>
       <div class="map-info-lbl">Hex Name</div>
       <input class="field-input" id="map-name-inp" value="${escHtml(hex.name)}"
-        placeholder="Name this hex…" oninput="updateMapHexField(${c},${r},'name',this.value)">
+        placeholder="Name this hex…" oninput="updateMapHexField(${c},${r},'name',this.value)" onblur="mapHexFieldBlur()">
     </div>
     <div>
       <div class="map-info-lbl">Notes</div>
       <textarea class="section-textarea" id="map-note-ta" style="min-height:80px"
         placeholder="Notes about this hex…"
-        oninput="updateMapHexField(${c},${r},'note',this.value)">${escHtml(hex.note)}</textarea>
+        oninput="updateMapHexField(${c},${r},'note',this.value)" onblur="mapHexFieldBlur()">${escHtml(hex.note)}</textarea>
     </div>
     <button class="map-save-btn" id="map-save-btn" onclick="mapSaveNoteFlash()">Save Note</button>
     ${_renderOverlayEditor(c, r, hex)}`;
@@ -2870,15 +2979,25 @@ function toggleMapExplored(c, r, val) {
 }
 
 function updateMapHexField(c, r, field, val) {
+  const key = c + ',' + r + ':' + field;
+  if (_mapNameNoteLastKey !== key) {
+    _pushMapUndo();
+    _mapNameNoteLastKey = key;
+  }
+  clearTimeout(_mapNameNoteTimer);
+  _mapNameNoteTimer = setTimeout(() => { _mapNameNoteLastKey = null; }, 750);
   const hex = getHex(c, r); hex[field] = val; save();
   if (field === 'name') drawWorld();
 }
+
+function mapHexFieldBlur() { _mapNameNoteLastKey = null; }
 
 // Returns the set of edge indices that participate in any segment of this overlay.
 
 function setOverlaySurface(c, r, surface) {
   const hex = getHex(c, r);
   const ov = hex.overlays.find(o => o.type === 'road'); if (!ov) return;
+  _pushMapUndo();
   ov.surface = surface; _invalidateOverlayCache(); save(); drawWorld();
 }
 
@@ -2886,6 +3005,7 @@ function setOverlaySurface(c, r, surface) {
 function setWaterOverlay(c, r, size) {
   const hex = getHex(c, r);
   if (!Array.isArray(hex.overlays)) hex.overlays = [];
+  _pushMapUndo();
   hex.overlays = hex.overlays.filter(o => o.type !== 'water');
   if (size) hex.overlays.push({ type: 'water', size, segments: [] });
   _invalidateOverlayCache(); save(); drawWorld();
@@ -3200,6 +3320,7 @@ function applyMapSettings() {
     applyBtn.textContent = 'Confirm & Apply';
     return;
   }
+  _pushMapUndo();
   Object.keys(state.hexes).forEach(k => {
     const [c, r] = k.split(',').map(Number);
     if (c < nColMin || c > nColMax || r < nRowMin || r > nRowMax) delete state.hexes[k];
@@ -3247,6 +3368,7 @@ function importMap() {
           hexSize: Math.max(16, Math.min(64, data.mapMeta.hexSize)),
         };
         state.hexes = data.hexes;
+        _mapUndoStack = []; _mapRedoStack = [];
         _mapSelHex = null;
         save();
         renderMapPanel();
@@ -4958,6 +5080,15 @@ function saveRelNoteModal() {
 
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { closeRelNoteModal(); closeRelConfirmModal(); }
+});
+
+document.addEventListener('keydown', e => {
+  if (state.ui.activeTab !== 'map') return;
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  const ctrl = e.ctrlKey || e.metaKey;
+  if (!ctrl) return;
+  if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); mapUndo(); }
+  else if ((e.key === 'z' && e.shiftKey) || e.key === 'y') { e.preventDefault(); mapRedo(); }
 });
 
 // ── Events ────────────────────────────────────────────────────────────────────

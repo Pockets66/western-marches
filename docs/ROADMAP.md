@@ -1,4 +1,4 @@
-# Roadmap (as of slice 14.10 complete)
+# Roadmap (as of slice 14.11 complete)
 
 ## Done
 - Slice 1: Shell + state layer + CSS foundation
@@ -21,9 +21,9 @@
 - Slice 14.9: Dropped — center-origin support subsumed by slice 14.10 segment model
 - Slice 14.10: Segment-based overlay model consolidation (schema v13) — smooth turns, parallel roads, segment editor, sync flow, lake-blocks-roads
 - Slice 14.10.1: Overlay rendering fixes — ponds no longer erase rivers, centripetal Catmull-Rom, no center-snapping on drag, per-segment flow arrows
+- Slice 14.11: Map undo system — snapshot-based, in-memory, 50-entry cap, drag = one unit
 
 ## Deferred
-- Slice 14.6 → rescheduled as Slice 14.11: Map undo system (building on segment model)
 
 ## In progress
 
@@ -39,6 +39,17 @@
 
 ## Deferred / may skip
 - Spells sub-tab on character sheets (Tier 4, unmentioned so far)
+
+## Planned Patches / Features
+- Recolour Hex Title fonts for better visibility
+- Recolour roads for better visibility (add yellow border)
+- Draw/Edit travel route
+- Route calculator finds shortest possible travel route WITHOUT going through impassable hexes
+- Toggle explored filter in map mode (GM Only)
+- Player-facing version of map
+- Player-facing version of each tab
+- Port everything to web with live updating player-facing pages
+- Player forum
 
 ## Working agreements
 - Linear commits on main, no branching (unless a slice gets experimental)

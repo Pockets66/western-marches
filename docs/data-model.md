@@ -495,6 +495,20 @@ them. Clearing a hex's terrain does NOT clear its overlays (roads and rivers are
 independent of terrain). Resizing the map to shrink bounds deletes out-of-bounds
 hexes entirely, which removes their overlays as part of the hex deletion.
 
+### Map Undo
+
+In-memory only — not persisted to `localStorage` and clears on every page reload.
+
+- **Scope:** `state.mapMeta` + `state.hexes` only. Other tabs unaffected.
+- **Stack cap:** 50 entries per stack (undo and redo); oldest entry dropped when exceeded.
+- **Snapshot model:** each entry is `JSON.stringify({ mapMeta, hexes })`. Restoring
+  parses it, assigns both fields, then calls `save()` — so `localStorage` tracks the
+  post-undo state. If the user reloads, they see the post-undo state with an empty stack.
+- **Drag = one unit:** a transaction captures a single pre-drag snapshot at mousedown
+  for overlay paint/erase; committed on mouseup/mouseleave.
+- **Import clears stacks:** after a successful map import both stacks are reset (prior
+  history is irrelevant to a different map).
+
 ### Pin
 
 ```js
