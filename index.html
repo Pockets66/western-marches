@@ -3007,8 +3007,9 @@ function setPinFaction(id, val) {
   pin.factionId = val || null;
   _invalidatePinCache();
   save(); drawWorld();
-  if (_mapSelHex) renderMapInfo(_mapSelHex.col, _mapSelHex.row);
-  if (_localmapHexKey) { _drawLocalMap(); _updateLmPinEditor(); }
+  if (_mapSelHex && _mapSelHex.col + ',' + _mapSelHex.row === pin.hexKey)
+    renderMapInfo(_mapSelHex.col, _mapSelHex.row);
+  if (_localmapHexKey === pin.hexKey) { _drawLocalMap(); _updateLmPinEditor(); }
 }
 
 function setPinField(id, field, val, c, r) {
@@ -3081,6 +3082,7 @@ function _renderPinSection(c, r) {
           <textarea class="section-textarea" style="min-height:50px;font-size:0.8rem"
             placeholder="Notes…"
             oninput="updatePinNotes('${pin.id}',this.value)" onblur="pinTextBlur()">${escHtml(pin.notes)}</textarea>
+          ${_renderPinNpcRoster(pin)}
           <button class="map-action-btn" style="background:rgba(180,60,60,0.18);border-color:#c05050;color:#e08080"
             onclick="deletePin('${pin.id}',${c},${r})">Delete pin</button>
         </div>`;
@@ -3907,6 +3909,7 @@ function _updateLmPinEditor() {
     <textarea class="section-textarea" style="min-height:48px;font-size:0.8rem"
       placeholder="Notes…"
       oninput="updatePinNotes('${pin.id}',this.value)" onblur="pinTextBlur()">${escHtml(pin.notes)}</textarea>
+    ${_renderPinNpcRoster(pin)}
     <button class="map-action-btn" style="background:rgba(180,60,60,0.18);border-color:#c05050;color:#e08080"
       onclick="lmDeletePin('${pin.id}')">Delete pin</button>`;
   ed.classList.remove('hidden');
@@ -4017,6 +4020,15 @@ function _initLmEvents() {
   canvas.addEventListener('mousemove',  _lmOnMousemove);
   canvas.addEventListener('mouseup',    _lmOnMouseup);
   canvas.addEventListener('mouseleave', _lmOnMouseup);
+}
+
+function openLocalMapAtPin(pinId) {
+  const pin = (state.pins||[]).find(p => p.id === pinId); if (!pin) return;
+  const [c, r] = pin.hexKey.split(',').map(Number);
+  openLocalMap(c, r);
+  _lmSelPinId = pinId;
+  _drawLocalMap();
+  _updateLmPinEditor();
 }
 
 function openLocalMap(c, r) {
@@ -5462,6 +5474,68 @@ function goToTab(tabName, contextUpdates) {
   switchTab(tabName);
 }
 
+function _afterPinRoster(pinId) {
+  const pin = (state.pins||[]).find(p => p.id === pinId); if (!pin) return;
+  if (_mapSelHex && _mapSelHex.col + ',' + _mapSelHex.row === pin.hexKey)
+    renderMapInfo(_mapSelHex.col, _mapSelHex.row);
+  if (_localmapHexKey === pin.hexKey) _updateLmPinEditor();
+}
+
+function assignNpcToPin(npcId, pinId) {
+  if (!npcId) return;
+  const npc = state.npcs.find(n => n.id === npcId); if (!npc) return;
+  _pushMapUndo();
+  npc.pinId = pinId;
+  save();
+  _afterPinRoster(pinId);
+}
+
+function removeNpcFromPin(npcId) {
+  const npc = state.npcs.find(n => n.id === npcId); if (!npc) return;
+  const pinId = npc.pinId;
+  _pushMapUndo();
+  npc.pinId = null;
+  save();
+  _afterPinRoster(pinId);
+}
+
+function newNpcAtPin(pinId) {
+  const n = {
+    id: uid(), name: '', role: '', notes: '',
+    factionId: null, pinId: pinId,
+    disposition: 'unknown', description: '', secrets: '', playerKnown: false,
+  };
+  state.npcs.push(n);
+  save();
+  goToTab('npcs', { activeNpcId: n.id });
+}
+
+function _renderPinNpcRoster(pin) {
+  const assigned  = (state.npcs || []).filter(n => n.pinId === pin.id);
+  const available = (state.npcs || []).filter(n => n.pinId !== pin.id);
+  const iSel = 'background:var(--panel-dark);border:1px solid var(--border);color:var(--text-dim);font-family:\'Crimson Pro\',Georgia,serif;font-size:0.82rem;padding:2px 4px;width:100%;cursor:pointer';
+  const rows = assigned.map(n => {
+    const pipCol = _NPC_DIP_COLORS[n.disposition];
+    const pip = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${pipCol||'var(--text-muted)'};flex-shrink:0"></span>`;
+    const nameHtml = n.name ? escHtml(n.name) : '<em style="color:var(--text-muted)">Unnamed</em>';
+    const roleHtml = n.role ? `<span style="color:var(--text-muted);font-size:0.78rem"> · ${escHtml(n.role)}</span>` : '';
+    return `<div style="display:flex;align-items:center;gap:6px;padding:2px 0">
+      ${pip}
+      <span style="flex:1;font-size:0.82rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nameHtml}${roleHtml}</span>
+      <button style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:0.9rem;padding:0 2px;line-height:1"
+        onclick="removeNpcFromPin('${n.id}')" title="Remove from pin">✕</button>
+    </div>`;
+  }).join('');
+  const pickerOpts = `<option value="">— assign NPC —</option>` +
+    available.map(n => `<option value="${n.id}">${escHtml(n.name||'(unnamed)')}${n.role?' · '+escHtml(n.role):''}</option>`).join('');
+  return `<div style="border-top:1px solid var(--border);padding-top:6px;display:flex;flex-direction:column;gap:4px">
+    <div class="map-info-lbl">NPCs at this location</div>
+    ${assigned.length ? rows : '<div style="color:var(--text-muted);font-style:italic;font-size:0.8rem">No NPCs assigned.</div>'}
+    ${available.length ? `<select style="${iSel}" onchange="assignNpcToPin(this.value,'${pin.id}');this.value=''">${pickerOpts}</select>` : ''}
+    <button class="map-action-btn" style="font-size:0.75rem;padding:2px 8px" onclick="newNpcAtPin('${pin.id}')">+ New NPC here</button>
+  </div>`;
+}
+
 // ── NPCs ──────────────────────────────────────────────────────────────────────
 
 let _npcSearch    = '';
@@ -5577,6 +5651,19 @@ function renderNpcDetail(n) {
               <div class="field-label">Faction</div>
               <select class="field-input"
                 onchange="updateNpcField('${n.id}','factionId',this.value||null)">${factionOpts}</select>
+            </div>
+            <div class="field-group">
+              <div class="field-label">Location (Pin)</div>
+              ${(() => {
+                const pin = n.pinId ? (state.pins||[]).find(p => p.id === n.pinId) : null;
+                if (!pin) return `<span style="color:var(--text-muted);font-style:italic;font-size:0.88rem">—</span>`;
+                const label = (pin.name || '(unnamed)') + '  ' + pin.hexKey;
+                return `<div style="display:flex;align-items:center;gap:8px">
+                  <span style="font-size:0.9rem;color:var(--text)">${escHtml(pin.name||'(unnamed)')}</span>
+                  <span style="font-size:0.8rem;color:var(--text-muted)">${escHtml(pin.hexKey)}</span>
+                  <button class="btn-small" onclick="openLocalMapAtPin('${pin.id}')">Open</button>
+                </div>`;
+              })()}
             </div>
             <div class="field-group">
               <div class="field-label">Disposition</div>
