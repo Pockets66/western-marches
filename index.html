@@ -2755,6 +2755,7 @@ function _buildMapToolbar() {
   const overlayTools = [
     ['paintRoad','🛤️ Roads','Click for stub · Drag to trace'],
     ['paintRiver','🌊 Rivers','Click for stub · Drag to trace'],
+    ['paintRoute','🗺️ Route','Click for stub · Drag to trace'],
     ['eraseRoad','Erase Road','Click to clear · Shift+click: single segment'],
     ['eraseRiver','Erase River','Click to clear · Shift+click: single segment'],
     ['eraseRoute','Erase Route','Click to clear · Shift+click: single segment']]
@@ -2789,7 +2790,7 @@ function setMapMode(mode) {
   if ((prev === 'paintRoad') !== (mode === 'paintRoad')) _buildMapToolbar();
   else document.querySelectorAll('.map-tool-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
   const _cv = _mapCanvas();
-  if (_cv) _cv.style.cursor = /^(paint|erase|explored|paintRoad|paintRiver|eraseRoad|eraseRiver|eraseRoute|rulerA|rulerB)$/.test(mode) ? 'crosshair' : 'default';
+  if (_cv) _cv.style.cursor = /^(paint|erase|explored|paintRoad|paintRiver|paintRoute|eraseRoad|eraseRiver|eraseRoute|rulerA|rulerB)$/.test(mode) ? 'crosshair' : 'default';
   updateMapStatus();
 }
 
@@ -2906,9 +2907,9 @@ function updateMapStatus() {
   const sb = document.getElementById('map-statusbar'); if (!sb) return;
   const hex = _mapHoverHex || _mapSelHex;
   const coord = hex ? hex.col + ', ' + hex.row : '—';
-  const modeLabel = { paintRoad: 'PAINT ROAD', paintRiver: 'PAINT RIVER', eraseRoad: 'ERASE ROAD', eraseRiver: 'ERASE RIVER', eraseRoute: 'ERASE ROUTE', rulerA: 'RULER — PICK A', rulerB: 'RULER — PICK B' }[_mapCurMode]
+  const modeLabel = { paintRoad: 'PAINT ROAD', paintRiver: 'PAINT RIVER', paintRoute: 'PAINT ROUTE', eraseRoad: 'ERASE ROAD', eraseRiver: 'ERASE RIVER', eraseRoute: 'ERASE ROUTE', rulerA: 'RULER — PICK A', rulerB: 'RULER — PICK B' }[_mapCurMode]
     || _mapCurMode.toUpperCase();
-  const brushPart = /^(paintRoad|paintRiver|eraseRoad|eraseRiver|eraseRoute|rulerA|rulerB)$/.test(_mapCurMode) ? ''
+  const brushPart = /^(paintRoad|paintRiver|paintRoute|eraseRoad|eraseRiver|eraseRoute|rulerA|rulerB)$/.test(_mapCurMode) ? ''
     : ' | BRUSH: ' + (TNAMES[_mapCurTerrain] || _mapCurTerrain).toUpperCase();
   sb.textContent = 'MODE: ' + modeLabel + brushPart + ' | HEX: ' + coord;
 }
@@ -2922,7 +2923,7 @@ function _initMapEvents() {
     const rect = canvas.getBoundingClientRect();
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   }
-  const _isOverlayMode = () => /^(paintRoad|paintRiver|eraseRoad|eraseRiver|eraseRoute)$/.test(_mapCurMode);
+  const _isOverlayMode = () => /^(paintRoad|paintRiver|paintRoute|eraseRoad|eraseRiver|eraseRoute)$/.test(_mapCurMode);
 
   canvas.addEventListener('mousedown', e => {
     if (e.button !== 0) return;
@@ -2931,12 +2932,12 @@ function _initMapEvents() {
     _mapLastClickPx = x; _mapLastClickPy = y;
     const h = pxToHex(x, y);
     if (!h) return;
-    if (_mapCurMode === 'paintRoad' || _mapCurMode === 'paintRiver') {
+    if (_mapCurMode === 'paintRoad' || _mapCurMode === 'paintRiver' || _mapCurMode === 'paintRoute') {
       _beginUndoTxn();
       _mapDragLastHex = h;
       _mapDragLastAnchor = _nearestDragAnchor(h.col, h.row, x, y);
       _mapDragOccurred = false;
-      _mapDragType = _mapCurMode === 'paintRoad' ? 'road' : 'river';
+      _mapDragType = _mapCurMode === 'paintRoad' ? 'road' : _mapCurMode === 'paintRiver' ? 'river' : 'route';
     } else if (_mapCurMode === 'eraseRoad' || _mapCurMode === 'eraseRiver' || _mapCurMode === 'eraseRoute') {
       _beginUndoTxn();
       _mapDragLastHex = h;
@@ -2973,7 +2974,7 @@ function _initMapEvents() {
       if (_cv2) _cv2.style.cursor = e.shiftKey ? 'cell' : 'crosshair';
     }
     if (!_mapIsDrag || !h) return;
-    if (_mapCurMode === 'paintRoad' || _mapCurMode === 'paintRiver') {
+    if (_mapCurMode === 'paintRoad' || _mapCurMode === 'paintRiver' || _mapCurMode === 'paintRoute') {
       const T = _mapDragType;
       const newAnchor = _nearestDragAnchor(h.col, h.row, x, y);
       if (_mapDragLastHex && h.col === _mapDragLastHex.col && h.row === _mapDragLastHex.row) {
@@ -3032,7 +3033,7 @@ function _initMapEvents() {
   function _finishOverlayDrag(wasMouseUp) {
     if (_mapIsDrag && _isOverlayMode()) {
       let mutated = false;
-      if (_mapCurMode === 'paintRoad' || _mapCurMode === 'paintRiver') {
+      if (_mapCurMode === 'paintRoad' || _mapCurMode === 'paintRiver' || _mapCurMode === 'paintRoute') {
         if (_mapDragOccurred) {
           mutated = true;
         } else if (wasMouseUp && _mapDragLastHex) {
@@ -3272,6 +3273,7 @@ function _segEditorSection(c, r, T, ov, headLabel, extraHtml) {
 function _renderOverlayEditor(c, r, hex) {
   const roadOv  = (hex.overlays || []).find(o => o.type === 'road');
   const riverOv = (hex.overlays || []).find(o => o.type === 'river');
+  const routeOv = (hex.overlays || []).find(o => o.type === 'route');
   const waterOv = (hex.overlays || []).find(o => o.type === 'water');
   const waterCur = waterOv ? waterOv.size : '';
   const btnSty = 'font-size:0.75rem;padding:2px 8px;background:var(--panel-dark);border:1px solid var(--border);color:var(--text);cursor:pointer';
@@ -3302,6 +3304,7 @@ function _renderOverlayEditor(c, r, hex) {
       <div class="map-info-lbl">Overlays</div>
       ${_segEditorSection(c, r, 'road',  roadOv,  'Road',  roadExtra)}
       ${_segEditorSection(c, r, 'river', riverOv, 'River', riverExtra)}
+      ${_segEditorSection(c, r, 'route', routeOv, 'Route', '')}
       <div class="map-overlay-group">
         <div class="map-overlay-head">Water Feature</div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:0.8rem">
