@@ -12,7 +12,7 @@ Pin schema unchanged from what's already documented.
 
 Western Marches play accumulates locations: settlements, ruins, dungeons,
 threats, camps, landmarks. The world hex map captures *which hex* something
-is in, but a 24-mile hex is too coarse for detail like "the inn is northwest
+is in, but a 5-mile hex is too coarse for detail like "the inn is northwest
 of the temple, the docks are at the southern edge." Local maps give the GM
 a place to capture that detail: optionally drop in a sketched/exported map
 image and pin specific locations onto it.
