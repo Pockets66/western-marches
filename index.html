@@ -4536,17 +4536,48 @@ function renderQuestSidebar() {
 
   const E_URGENCY_COLORS = { low: 'var(--text-dim)', medium: 'var(--gold-dim)', high: '#c07820', critical: 'var(--red)' };
   el.innerHTML = quests.map(q => {
-    const st   = Q_STATUSES.find(s => s.key === q.status);
+    const st    = Q_STATUSES.find(s => s.key === q.status);
     const isAct = state.ui.activeQuestId === q.id;
     const urgDot = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${E_URGENCY_COLORS[q.urgency]||'var(--text-dim)'};flex-shrink:0"></span>`;
     const stDot  = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${st?st.color:'var(--text-muted)'};flex-shrink:0" title="${st?st.label:''}"></span>`;
     const lock   = q.playerKnown ? '' : `<span style="font-size:0.7rem;color:var(--text-muted)" title="Not player-known">🔒</span>`;
+    const fac    = q.factionId ? (state.factions||[]).find(f => f.id === q.factionId) : null;
+    const facDot = fac ? `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${fac.color};flex-shrink:0" title="${escHtml(fac.name)}"></span>` : '';
+    let locHint = '';
+    if (q.pinId) {
+      const pin = (state.pins||[]).find(p => p.id === q.pinId);
+      locHint = pin ? (pin.name || pin.hexKey) : '';
+    } else if (q.hexKey) {
+      const hex = state.hexes[q.hexKey];
+      locHint = (hex && hex.name) ? hex.name : q.hexKey;
+    }
+    const locEl = locHint ? `<span style="font-size:0.72rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px" title="${escHtml(locHint)}">${escHtml(locHint)}</span>` : '';
     return `<div class="q-list-row${isAct?' active':''}" onclick="selectQuest('${q.id}')">
       ${stDot}
       <span class="q-list-title">${escHtml(q.title) || '<span style="color:var(--text-muted);font-style:italic">Untitled</span>'}</span>
-      ${urgDot}${lock}
+      ${locEl}${facDot}${urgDot}${lock}
     </div>`;
   }).join('');
+}
+
+function setQuestPin(id, val) {
+  const q = state.quests.find(q => q.id === id); if (!q) return;
+  q.pinId = val || null;
+  if (q.pinId) q.hexKey = null;
+  save(); renderQuestSidebar(); renderQuestDetail();
+}
+
+function setQuestHex(id, val) {
+  const q = state.quests.find(q => q.id === id); if (!q) return;
+  q.hexKey = val || null;
+  if (q.hexKey) q.pinId = null;
+  save(); renderQuestSidebar(); renderQuestDetail();
+}
+
+function setQuestFaction(id, val) {
+  const q = state.quests.find(q => q.id === id); if (!q) return;
+  q.factionId = val || null;
+  save(); renderQuestSidebar(); renderQuestDetail();
 }
 
 function renderQuestDetail() {
@@ -4573,10 +4604,39 @@ function renderQuestDetail() {
       onclick="setQuestStatus('${q.id}','${s.key}')">${escHtml(s.label)}</button>`
   ).join('');
 
+  const faction     = q.factionId ? (state.factions || []).find(f => f.id === q.factionId) : null;
+  const accentColor = faction ? faction.color : null;
+
+  const iSel = 'background:rgba(0,0,0,0.2);border:1px solid var(--border);color:var(--text-dim);font-family:\'Crimson Pro\',Georgia,serif;font-size:0.85rem;padding:4px 6px;outline:none;width:100%;cursor:pointer';
+
+  const npcOpts = `<option value="">No giver</option>` +
+    (state.npcs || []).map(n => {
+      const fn = n.factionId ? (state.factions || []).find(f => f.id === n.factionId) : null;
+      return `<option value="${n.id}"${q.giverNpcId===n.id?' selected':''}>${escHtml(fn ? n.name+' ('+fn.name+')' : n.name)}</option>`;
+    }).join('');
+
+  const factionOpts = `<option value="">No faction</option>` +
+    (state.factions || []).map(f =>
+      `<option value="${f.id}"${q.factionId===f.id?' selected':''}>${escHtml(f.name)}</option>`
+    ).join('');
+
+  const pinOpts = `<option value="">No pin</option>` +
+    (state.pins || []).map(p =>
+      `<option value="${p.id}"${q.pinId===p.id?' selected':''}>${escHtml((p.name||'<unnamed>')+' ('+p.hexKey+')')}</option>`
+    ).join('');
+
+  const hexOpts = `<option value="">No hex</option>` +
+    Object.entries(state.hexes || {})
+      .filter(([,h]) => h.name)
+      .sort(([,a],[,b]) => a.name.localeCompare(b.name))
+      .map(([k,h]) => `<option value="${k}"${q.hexKey===k?' selected':''}>${escHtml(h.name)} (${k})</option>`)
+      .join('');
+
   detail.innerHTML = `
     <div style="max-width:860px">
       <div class="q-detail-header">
         <input class="q-title-input" value="${escHtml(q.title)}" placeholder="Quest title…"
+          style="${accentColor?`border-left:3px solid ${accentColor};padding-left:8px`:''}"
           oninput="updateQuestField('${q.id}','title',this.value)">
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;font-size:0.82rem;white-space:nowrap">
           <input type="checkbox" ${q.playerKnown?'checked':''} onchange="toggleQuestKnown('${q.id}')">
@@ -4598,6 +4658,36 @@ function renderQuestDetail() {
           <textarea class="section-textarea" style="min-height:80px;margin-top:4px"
             placeholder="What do the players know about this quest?"
             oninput="updateQuestField('${q.id}','summary',this.value)">${escHtml(q.summary)}</textarea>
+        </div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          <div style="flex:1;min-width:160px">
+            <div class="map-info-lbl">Giver NPC</div>
+            <select style="${iSel};margin-top:4px" onchange="updateQuestField('${q.id}','giverNpcId',this.value||null)">${npcOpts}</select>
+          </div>
+          <div style="flex:1;min-width:160px">
+            <div class="map-info-lbl">Faction</div>
+            <select style="${iSel};margin-top:4px" onchange="setQuestFaction('${q.id}',this.value)">${factionOpts}</select>
+          </div>
+        </div>
+        <div>
+          <div class="map-info-lbl">Location</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
+            <select style="${iSel};flex:1;min-width:140px" onchange="setQuestPin('${q.id}',this.value)">${pinOpts}</select>
+            <select style="${iSel};flex:1;min-width:140px" onchange="setQuestHex('${q.id}',this.value)">${hexOpts}</select>
+          </div>
+          <div style="font-size:0.75rem;color:var(--text-muted);margin-top:3px;font-style:italic">Setting one location clears the other.</div>
+        </div>
+        <div>
+          <div class="map-info-lbl">Reward</div>
+          <textarea class="section-textarea" style="min-height:42px;margin-top:4px"
+            placeholder="Coin, items, favors, knowledge…"
+            oninput="updateQuestField('${q.id}','reward',this.value)">${escHtml(q.reward)}</textarea>
+        </div>
+        <div>
+          <div class="map-info-lbl">GM Notes</div>
+          <textarea class="section-textarea" style="min-height:120px;margin-top:4px"
+            placeholder="GM notes, branches, complications…"
+            oninput="updateQuestField('${q.id}','notes',this.value)">${escHtml(q.notes)}</textarea>
         </div>
       </div>
     </div>`;
