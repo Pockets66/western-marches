@@ -5682,11 +5682,16 @@ function renderNpcSidebar() {
     const pipCol   = _NPC_DIP_COLORS[n.disposition];
     const pip      = pipCol
       ? `<div style="width:8px;height:8px;border-radius:50%;background:${pipCol};flex-shrink:0"></div>` : '';
+    const locPin  = n.pinId ? (state.pins||[]).find(p => p.id === n.pinId) : null;
+    const locTag  = locPin
+      ? `<div style="font-size:0.68rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">📍 ${escHtml(locPin.name||locPin.hexKey)}</div>`
+      : '';
     return `<div class="p-item${n.id === state.ui.activeNpcId ? ' active' : ''}" onclick="selectNpc('${n.id}')">
       <div class="faction-dot" style="background:${dot}"></div>
       <div style="flex:1;min-width:0">
         <div class="p-item-name">${nameHtml}</div>
         ${n.role ? `<div style="font-size:0.72rem;color:var(--text-muted);line-height:1.3">${escHtml(n.role)}</div>` : ''}
+        ${locTag}
       </div>
       ${pip}
     </div>`;
@@ -5747,16 +5752,16 @@ function renderNpcDetail(n) {
             </div>
             <div class="field-group">
               <div class="field-label">Location (Pin)</div>
-              ${(() => {
-                const pin = n.pinId ? (state.pins||[]).find(p => p.id === n.pinId) : null;
-                if (!pin) return `<span style="color:var(--text-muted);font-style:italic;font-size:0.88rem">—</span>`;
-                const label = (pin.name || '(unnamed)') + '  ' + pin.hexKey;
-                return `<div style="display:flex;align-items:center;gap:8px">
-                  <span style="font-size:0.9rem;color:var(--text)">${escHtml(pin.name||'(unnamed)')}</span>
-                  <span style="font-size:0.8rem;color:var(--text-muted)">${escHtml(pin.hexKey)}</span>
-                  <button class="btn-small" onclick="openLocalMapAtPin('${pin.id}')">Open</button>
-                </div>`;
-              })()}
+              <div style="display:flex;gap:6px;align-items:center">
+                <select class="field-input" style="flex:1"
+                  onchange="setNpcPin('${n.id}',this.value)">
+                  <option value="">— mobile / unknown —</option>
+                  ${(state.pins||[]).map(p =>
+                    `<option value="${p.id}"${n.pinId===p.id?' selected':''}>${escHtml((p.name||'(unnamed)')+' ('+p.hexKey+')')}</option>`
+                  ).join('')}
+                </select>
+                ${n.pinId ? `<button class="btn-small" onclick="openLocalMapAtPin('${n.pinId}')">Open</button>` : ''}
+              </div>
             </div>
             <div class="field-group">
               <div class="field-label">Disposition</div>
@@ -5793,6 +5798,14 @@ function renderNpcDetail(n) {
         </div>
       </div>
     </div>`;
+}
+
+function setNpcPin(id, val) {
+  const n = state.npcs.find(n => n.id === id); if (!n) return;
+  n.pinId = val || null;
+  save();
+  renderNpcSidebar();
+  renderNpcDetail(n);
 }
 
 function updateNpcField(id, field, value) {
