@@ -1369,7 +1369,7 @@ function toast(msg) {
 const STORAGE_KEY = 'wm_unified_v1';
 
 let state = {
-  schemaVersion: 14,
+  schemaVersion: 15,
   factions:  [],
   npcs:      [],
   rumors:    [],
@@ -1422,7 +1422,7 @@ function load() {
   try {
     const parsed = JSON.parse(raw);
     const v = parsed.schemaVersion || 1;
-    if (v <= 14) {
+    if (v <= 15) {
       if (v < 2) migrateFactions(parsed);
       if (v < 3) migrateToV3(parsed);
       if (v < 4) migrateToV4(parsed);
@@ -1436,6 +1436,7 @@ function load() {
       if (v < 12) migrateToV12(parsed);
       if (v < 13) migrateToV13(parsed);
       if (v < 14) migrateToV14(parsed);
+      if (v < 15) migrateToV15(parsed);
       state = parsed;
       if (!state.localMaps || typeof state.localMaps !== 'object') state.localMaps = {};
       if (!Array.isArray(state.pins)) state.pins = [];
@@ -1665,6 +1666,15 @@ function migrateToV14(parsed) {
     if (!('name'       in p)) p.name       = '';
   });
   parsed.schemaVersion = 14;
+}
+
+function migrateToV15(parsed) {
+  Object.values(parsed.hexes || {}).forEach(hex => {
+    (hex.overlays || []).forEach(ov => {
+      if (ov.type === 'road' && !('state' in ov)) ov.state = 'average';
+    });
+  });
+  parsed.schemaVersion = 15;
 }
 
 function migrateFactions(parsed) {
@@ -2810,7 +2820,7 @@ function _addOverlaySegment(hex, type, from, to, flow) {
   let ov = hex.overlays.find(o => o.type === type);
   if (!ov) {
     ov = { type, segments: [] };
-    if (type === 'road') ov.surface = _mapRoadSurface || 'dirt';
+    if (type === 'road') { ov.surface = _mapRoadSurface || 'dirt'; ov.state = 'average'; }
     hex.overlays.push(ov);
   }
   if (!Array.isArray(ov.segments)) ov.segments = [];
@@ -3239,6 +3249,14 @@ function _renderOverlayEditor(c, r, hex) {
           ${(roadOv&&roadOv.surface===s)?'checked':''} onchange="setOverlaySurface(${c},${r},'${s}')">
         <span style="text-transform:capitalize">${s}</span>
       </label>`
+    ).join('')}
+    <span style="color:var(--text-dim);font-size:0.8rem;margin-left:6px">Condition:</span>
+    ${['horrible','poor','average','good'].map(s =>
+      `<label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:0.8rem">
+        <input type="radio" name="road-cond-${c}x${r}" value="${s}"
+          ${(roadOv&&(roadOv.state||'average')===s)?'checked':''} onchange="setOverlayState(${c},${r},'${s}')">
+        <span style="text-transform:capitalize">${s}</span>
+      </label>`
     ).join('')}`;
 
   const riverExtra = `<button style="${btnSty}" onclick="segEditorSyncFlow(${c},${r})"
@@ -3466,6 +3484,14 @@ function setOverlaySurface(c, r, surface) {
   ov.surface = surface; _invalidateOverlayCache(); save(); drawWorld();
 }
 
+function setOverlayState(c, r, st) {
+  const hex = getHex(c, r);
+  const ov = hex.overlays.find(o => o.type === 'road'); if (!ov) return;
+  _pushMapUndo();
+  ov.state = st; save();
+  if (state.ui.rulerHexA && state.ui.rulerHexB) renderRulerPanel();
+}
+
 
 function setWaterOverlay(c, r, size) {
   const hex = getHex(c, r);
@@ -3541,12 +3567,15 @@ function modifierFor(hexKey) {
   const h = state.hexes[hexKey];
   if (!h) return 0.5;
   if (h.overlays && h.overlays.some(o => o.type === 'road')) {
-    const hasLake = h.overlays.some(o => o.type === 'water' && o.size === 'lake');
-    if (!hasLake) return 1.0;
     const roadOv = h.overlays.find(o => o.type === 'road');
-    // Edge-to-edge road segments (no 'C' anchor) bypass the lake — road goes around
-    if ((roadOv.segments || []).some(s => s.from !== 'C' && s.to !== 'C')) return 1.0;
-    // All road segments pass through center — lake blocks the road
+    const hasLake = h.overlays.some(o => o.type === 'water' && o.size === 'lake');
+    const lakeBlocks = hasLake && !(roadOv.segments || []).some(s => s.from !== 'C' && s.to !== 'C');
+    if (!lakeBlocks) {
+      const surfMult  = { dirt: 1.0, gravel: 1.0, stone: 1.5 }[roadOv.surface || 'dirt'] || 1.0;
+      const stateMult = { horrible: 0.5, poor: 0.75, average: 1.0, good: 1.25 }[roadOv.state || 'average'] || 1.0;
+      return surfMult * stateMult;
+    }
+    // Lake blocks road — fall through to terrain modifier
   }
   switch (h.terrain) {
     case 'plains': case 'settled':                                    return 1.0;
