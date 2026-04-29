@@ -3096,10 +3096,19 @@ function _renderPinSection(c, r) {
             onclick="deletePin('${pin.id}',${c},${r})">Delete pin</button>
         </div>`;
     }
+    const _pnC = (state.npcs  ||[]).filter(n => n.pinId === pin.id).length;
+    const _prC = (state.rumors||[]).filter(r => r.pinId === pin.id).length;
+    const _pqC = (state.quests||[]).filter(q => q.pinId === pin.id && _questGroup(q.status) === 'active').length;
+    const countBadges = [
+      _pnC ? `<span style="font-size:0.62rem;color:var(--text-muted)">👤${_pnC}</span>` : '',
+      _prC ? `<span style="font-size:0.62rem;color:var(--text-muted)">📜${_prC}</span>` : '',
+      _pqC ? `<span style="font-size:0.62rem;color:var(--gold-dim)">✦${_pqC}</span>`  : '',
+    ].filter(Boolean).join('');
     rows += `
       <div style="display:flex;align-items:center;gap:6px;padding:2px 0">
         ${dot}
         <span style="flex:1;font-size:0.82rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nameLabel}</span>
+        ${countBadges}
         <button title="${pin.discovered ? 'Discovered' : 'Undiscovered'}"
           style="background:none;border:none;cursor:pointer;font-size:0.85rem;padding:0 2px;${discStyle}"
           onclick="togglePinDiscovered('${pin.id}',${c},${r})">&#128065;</button>
@@ -3871,6 +3880,21 @@ function _drawPinDot(ctx, pin, pinR, selected) {
     ctx.fillText(pin.name, px, py + pinR + 10);
     ctx.shadowBlur = 0;
   }
+  // Count badge (NPCs + rumors + active quests)
+  const _nC = (state.npcs  ||[]).filter(n => n.pinId === pin.id).length;
+  const _rC = (state.rumors||[]).filter(r => r.pinId === pin.id).length;
+  const _qC = (state.quests||[]).filter(q => q.pinId === pin.id && _questGroup(q.status) === 'active').length;
+  const _tot = _nC + _rC + _qC;
+  if (_tot > 0) {
+    const bx = px + pinR * 0.65, by = py - pinR * 0.65, br = _tot >= 10 ? 8 : 7;
+    ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(20,14,6,0.9)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(200,151,42,0.85)'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = 'rgba(200,151,42,1)';
+    ctx.font = `bold ${br < 8 ? 8 : 9}px sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(String(_tot), bx, by);
+  }
 }
 
 function _drawLocalMapPins(ctx) {
@@ -4290,9 +4314,13 @@ function _rumorCard(r, isArchived) {
   let locationTag = '';
   if (r.pinId) {
     const pin = (state.pins||[]).find(p => p.id === r.pinId);
-    if (pin) locationTag = `<span onclick="openLocalMapAtPin('${pin.id}')"
-      style="font-size:0.72rem;color:var(--gold-dim);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%"
-      title="${escHtml((pin.name||'(unnamed)')+' — '+pin.hexKey)}">📍 ${escHtml(pin.name||'(unnamed)')}</span>`;
+    if (pin) {
+      const pinFac = pin.factionId ? (state.factions||[]).find(f => f.id === pin.factionId) : null;
+      const facDot = pinFac ? `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${escHtml(pinFac.color)};flex-shrink:0;vertical-align:middle;margin-right:2px"></span>` : '';
+      locationTag = `<span onclick="openLocalMapAtPin('${pin.id}')"
+        style="font-size:0.72rem;color:var(--gold-dim);cursor:pointer;overflow:hidden;text-overflow:ellipsis;max-width:100%;display:inline-flex;align-items:center;gap:2px"
+        title="${escHtml((pin.name||'(unnamed)')+' — '+pin.hexKey+(pinFac?' ('+pinFac.name+')':''))}">${facDot}📍 ${escHtml(pin.name||'(unnamed)')}</span>`;
+    }
   } else if (r.hexKey) {
     const hex = state.hexes[r.hexKey];
     const lbl = (hex && hex.name) ? hex.name : r.hexKey;
