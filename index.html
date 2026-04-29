@@ -3886,26 +3886,25 @@ function saveRouteOnMap() {
   const move = state.ui.rulerMove || 5;
   const fp = _rulerPath || _dijkstraPath(aKey, bKey, move);
   if (!fp || fp.length < 2) { save(); drawWorld(); return; }
-  // Build one segment per hex: entry-anchor → exit-anchor.
-  // Start hex: C → first-exit. Middle: entry → exit. End hex: entry → C.
-  const hexEntry = new Map(); // hexKey -> entry anchor ('C' or 0-5)
-  const hexExit  = new Map(); // hexKey -> exit anchor
-  for (let i = 0; i < fp.length - 1; i++) {
-    const eL = _sharedEdge(fp[i], fp[i+1]);
-    if (eL === -1) continue;
-    const eR = (eL + 3) % 6;
-    const kA = fp[i].col + ',' + fp[i].row;
-    const kB = fp[i+1].col + ',' + fp[i+1].row;
-    if (!hexEntry.has(kA)) hexEntry.set(kA, 'C');
-    hexExit.set(kA, eL);
-    if (!hexEntry.has(kB)) hexEntry.set(kB, eR);
-    if (!hexExit.has(kB)) hexExit.set(kB, 'C');
-  }
-  fp.forEach(h => {
-    const k = h.col + ',' + h.row;
-    const from = hexEntry.get(k), to = hexExit.get(k);
-    if (from !== undefined && to !== undefined && from !== to)
-      _addOverlaySegment(getHex(h.col, h.row), 'route', from, to);
+  const last = fp.length - 1;
+  fp.forEach((h, i) => {
+    const hex = getHex(h.col, h.row);
+    const key = h.col + ',' + h.row;
+    // Derive entry/exit anchors from path adjacency
+    let eIn = 'C', eOut = 'C';
+    if (i > 0)    { const p=fp[i-1]; const e=_sharedEdge({col:h.col,row:h.row},{col:p.col,row:p.row}); eIn  = e===-1?'C':e; }
+    if (i < last) { const n=fp[i+1]; const e=_sharedEdge({col:h.col,row:h.row},{col:n.col,row:n.row}); eOut = e===-1?'C':e; }
+    if (eIn === eOut) return;
+    // Use road segment chain when the route benefited from the road bonus in this hex
+    const { usedRoadBonus } = costForHexInPath(hex, eIn, eOut, key, move);
+    if (usedRoadBonus) {
+      const roadSegs = roadPathInHex(hex, eIn, eOut);
+      if (roadSegs && roadSegs.length > 0) {
+        roadSegs.forEach(seg => _addOverlaySegment(hex, 'route', seg.from, seg.to));
+        return;
+      }
+    }
+    _addOverlaySegment(hex, 'route', eIn, eOut);
   });
   _invalidateOverlayCache(); save(); drawWorld();
 }
