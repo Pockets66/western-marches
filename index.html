@@ -3662,16 +3662,21 @@ function _riverCrossingPenaltyPerHex(fullPathKeys) {
 function daysForPath(fullPathKeys, move) {
   let days = 0, waterHexes = 0;
   const crossingCounts = _riverCrossingPenaltyPerHex(fullPathKeys);
+  const last = fullPathKeys.length - 1;
   const perHex = fullPathKeys.map((key, i) => {
     const m = modifierFor(key);
-    const isOrigin = i === 0;
-    const isWater  = m === 0;
+    const isOrigin   = i === 0;
+    const isWater    = m === 0;
+    const isInterior = i > 0 && i < last;
     if (!isOrigin && isWater) waterHexes++;
-    const terrainDays    = (isOrigin || isWater) ? 0 : 1.25 / (move * m);
-    const crossings      = isWater ? 0 : (crossingCounts[i] || 0);
+    const terrainDays     = (isOrigin || isWater) ? 0 : 1.25 / (move * m);
+    const crossings       = isWater ? 0 : (crossingCounts[i] || 0);
     const crossingPenalty = crossings * 0.25;
-    days += terrainDays + crossingPenalty;
-    return { key, modifier: m, terrainDays, crossingPenalty, crossings, totalDays: terrainDays + crossingPenalty };
+    const hex = state.hexes[key];
+    const hasLake = isInterior && hex && (hex.overlays||[]).some(o => o.type === 'water' && o.size === 'lake');
+    const lakePenalty = hasLake ? 0.25 : 0;
+    days += terrainDays + crossingPenalty + lakePenalty;
+    return { key, modifier: m, terrainDays, crossingPenalty, crossings, lakePenalty, totalDays: terrainDays + crossingPenalty + lakePenalty };
   });
   return { days, waterHexes, perHex };
 }
@@ -3763,7 +3768,7 @@ function renderRulerPanel() {
   const warningHtml = waterHexes > 0
     ? '<div class="r-warning">&#x26A0; Path crosses ' + waterHexes + ' impassable hex' + (waterHexes>1?'es':'')
       + '.<br>Days shown exclude impassable hexes.</div>' : '';
-  const rowsHtml = perHex.slice(1).map(({ key, modifier: m, totalDays, crossings }) => {
+  const rowsHtml = perHex.slice(1).map(({ key, modifier: m, totalDays, crossings, lakePenalty }) => {
     const [kc, kr] = key.split(',').map(Number);
     const h = state.hexes[key];
     const hasRoad = h && h.overlays && h.overlays.some(o => o.type === 'road');
@@ -3779,9 +3784,10 @@ function renderRulerPanel() {
       + '<option value="impassable"' + ovSel('impassable') + '>block</option>'
       + '</select>';
     const riverTag = crossings > 0 ? ' <span style="color:#e8a040;font-size:0.7rem">(+R×' + crossings + ')</span>' : '';
+    const lakeTag  = lakePenalty > 0 ? ' <span style="color:#6ab0d4;font-size:0.7rem">(+L)</span>' : '';
     return '<tr' + (m === 0 ? ' class="r-water"' : '') + '><td>('+kc+','+kr+')</td><td>'
       + escHtml(terrainLabel) + '</td><td>' + (m===0?'—':m.toFixed(2))
-      + '</td><td>' + (m===0?'&#x26A0;':totalDays.toFixed(2)) + riverTag
+      + '</td><td>' + (m===0?'&#x26A0;':totalDays.toFixed(2)) + riverTag + lakeTag
       + '</td><td>' + ovHtml + '</td></tr>';
   }).join('');
   panel.innerHTML = `
