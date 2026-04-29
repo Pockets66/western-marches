@@ -417,6 +417,29 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
 .btn-modal-save { font-family: 'Cinzel', serif; font-size: 0.65rem; letter-spacing: 0.1em; text-transform: uppercase; padding: 6px 14px; background: var(--gold-dim); border: 1px solid var(--gold); color: var(--gold-pale); cursor: pointer; }
 .btn-modal-save:hover { background: var(--gold); color: #12100a; }
 .btn-modal-save:disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
+/* ── Local map modal ─────────────────────────────────────────────────────── */
+#localmap-modal {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.88); z-index: 300;
+  display: flex; flex-direction: column;
+}
+#localmap-modal.hidden { display: none; }
+.lm-header {
+  display: flex; align-items: center; gap: 12px; padding: 6px 14px;
+  background: var(--panel-mid); border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.lm-header-title {
+  font-family: 'Cinzel', serif; font-size: 0.7rem; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--gold-dim); flex: 1;
+}
+.lm-body {
+  flex: 1; overflow: auto; padding: 20px; display: flex;
+  align-items: flex-start; justify-content: flex-start;
+}
+#localmap-canvas { display: block; }
+.lm-footer {
+  display: flex; align-items: center; gap: 8px; padding: 6px 14px;
+  background: var(--panel-mid); border-top: 1px solid var(--border); flex-shrink: 0;
+}
 .ms-bounds-info {
   font-family: 'Crimson Pro', Georgia, serif; font-size: 0.88rem; color: var(--text-dim);
   background: rgba(0,0,0,0.2); padding: 8px 12px; line-height: 1.9;
@@ -1233,6 +1256,22 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
   </div>
 </div>
 
+<!-- Local map modal -->
+<div class="hidden" id="localmap-modal">
+  <div class="lm-header">
+    <span class="lm-header-title" id="lm-title">Local Map</span>
+    <button class="map-action-btn" onclick="closeLocalMap()">✕ Close</button>
+  </div>
+  <div class="lm-body" id="lm-body">
+    <canvas id="localmap-canvas"></canvas>
+  </div>
+  <div class="lm-footer">
+    <button class="map-action-btn" onclick="localMapUploadImage()"
+      title="Images resized to 1600px max, JPEG quality 85%. Stored locally; total budget ~5MB.">Upload Image</button>
+    <button class="map-action-btn" id="lm-remove-btn" onclick="localMapRemoveImage()" disabled>Remove Image</button>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1687,8 +1726,10 @@ function _mapRestoreSnapshot(snap) {
   state.localMaps = d.localMaps || {};
   _invalidateOverlayCache();
   _invalidatePinCache();
+  _localmapImgCache = {};
   save();
   drawWorld();
+  if (_localmapHexKey) _drawLocalMap();
   if (_mapSelHex) {
     const k = _mapSelHex.col + ',' + _mapSelHex.row;
     if (state.hexes[k]) renderMapInfo(_mapSelHex.col, _mapSelHex.row);
@@ -2950,7 +2991,10 @@ function _renderPinSection(c, r) {
     <div style="border-top:1px solid var(--border);padding-top:10px;display:flex;flex-direction:column;gap:6px">
       <div class="map-info-lbl">Pins</div>
       ${rows}
-      <button class="map-action-btn" style="margin-top:2px" onclick="addPin(${c},${r})">+ New pin</button>
+      <div style="display:flex;gap:6px;margin-top:2px;flex-wrap:wrap">
+        <button class="map-action-btn" onclick="addPin(${c},${r})">+ New pin</button>
+        <button class="map-action-btn" onclick="openLocalMap(${c},${r})">${state.localMaps[hexKey] ? 'Open Local Map' : 'Create Local Map'}</button>
+      </div>
     </div>`;
 }
 
@@ -3611,6 +3655,148 @@ function importMap() {
     reader.readAsText(file);
   };
   inp.click();
+}
+
+// ── Local map modal ───────────────────────────────────────────────────────────
+
+let _localmapHexKey  = null;
+let _localmapImgCache = {};  // hexKey → loaded Image object
+
+function openLocalMap(c, r) {
+  const hexKey = c + ',' + r;
+  if (!state.localMaps[hexKey]) {
+    state.localMaps[hexKey] = { imageDataUrl: null, width: 800, height: 600 };
+    save();
+  }
+  _localmapHexKey = hexKey;
+  const hex = getHex(c, r);
+  const titleEl = document.getElementById('lm-title');
+  if (titleEl) titleEl.textContent = (hex.name ? hex.name + ' — ' : '') + 'Local Map (' + c + ', ' + r + ')';
+  document.getElementById('localmap-modal').classList.remove('hidden');
+  _drawLocalMap();
+}
+
+function closeLocalMap() {
+  document.getElementById('localmap-modal').classList.add('hidden');
+  _localmapHexKey = null;
+}
+
+function _drawLocalMapPins(ctx) {
+  if (!_localmapHexKey) return;
+  const pins = (state.pins || []).filter(p => p.hexKey === _localmapHexKey);
+  const pinR = 14;
+  ctx.save();
+  ctx.font = 'bold 14px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  pins.forEach(pin => {
+    const { x: px, y: py } = pin;
+    ctx.beginPath();
+    ctx.arc(px, py, pinR, 0, Math.PI * 2);
+    ctx.fillStyle = pinDisplayColor(pin);
+    ctx.fill();
+    ctx.lineWidth = 1.5;
+    if (!pin.discovered) { ctx.setLineDash([3, 3]); ctx.strokeStyle = 'rgba(0,0,0,0.8)'; }
+    else                 { ctx.setLineDash([]);      ctx.strokeStyle = 'rgba(0,0,0,0.7)'; }
+    ctx.stroke();
+    ctx.setLineDash([]);
+    const pt = PIN_TYPES.find(t => t.key === pin.type);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(pt ? pt.glyph : 'O', px, py);
+    if (pin.name) {
+      ctx.font = '11px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.shadowColor = 'rgba(0,0,0,0.8)';
+      ctx.shadowBlur = 3;
+      ctx.fillText(pin.name, px, py + pinR + 10);
+      ctx.shadowBlur = 0;
+      ctx.font = 'bold 14px sans-serif';
+    }
+  });
+  ctx.restore();
+}
+
+function _drawLocalMap() {
+  if (!_localmapHexKey) return;
+  const lm = state.localMaps[_localmapHexKey];
+  if (!lm) return;
+  const canvas = document.getElementById('localmap-canvas');
+  if (!canvas) return;
+  canvas.width  = lm.width;
+  canvas.height = lm.height;
+  const ctx = canvas.getContext('2d');
+
+  const removeBtn = document.getElementById('lm-remove-btn');
+  if (removeBtn) removeBtn.disabled = !lm.imageDataUrl;
+
+  if (lm.imageDataUrl) {
+    const cached = _localmapImgCache[_localmapHexKey];
+    const drawWithImg = img => {
+      ctx.drawImage(img, 0, 0, lm.width, lm.height);
+      _drawLocalMapPins(ctx);
+    };
+    if (cached && cached.complete && cached.naturalWidth) {
+      drawWithImg(cached);
+    } else {
+      const img = new Image();
+      img.onload = () => { _localmapImgCache[_localmapHexKey] = img; drawWithImg(img); };
+      img.src = lm.imageDataUrl;
+    }
+  } else {
+    ctx.fillStyle = '#1c1810';
+    ctx.fillRect(0, 0, lm.width, lm.height);
+    ctx.strokeStyle = 'rgba(200,160,60,0.07)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x <= lm.width;  x += 40) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,lm.height); ctx.stroke(); }
+    for (let y = 0; y <= lm.height; y += 40) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(lm.width,y);  ctx.stroke(); }
+    _drawLocalMapPins(ctx);
+  }
+}
+
+function localMapUploadImage() {
+  if (!_localmapHexKey) return;
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*';
+  inp.onchange = e => {
+    const file = e.target.files[0]; if (!file) return;
+    const objUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(objUrl);
+      const MAX = 1600;
+      let w = img.naturalWidth, h = img.naturalHeight;
+      if (w > MAX || h > MAX) {
+        if (w >= h) { h = Math.round(h * MAX / w); w = MAX; }
+        else        { w = Math.round(w * MAX / h); h = MAX; }
+      }
+      const off = document.createElement('canvas');
+      off.width = w; off.height = h;
+      off.getContext('2d').drawImage(img, 0, 0, w, h);
+      const dataUrl = off.toDataURL('image/jpeg', 0.85);
+      const lm = state.localMaps[_localmapHexKey];
+      _pushMapUndo();
+      lm.imageDataUrl = dataUrl;
+      lm.width  = w;
+      lm.height = h;
+      delete _localmapImgCache[_localmapHexKey];
+      save();
+      _drawLocalMap();
+      toast('Image stored (~' + Math.round(dataUrl.length * 0.75 / 1024) + 'kB)');
+    };
+    img.src = objUrl;
+  };
+  inp.click();
+}
+
+function localMapRemoveImage() {
+  if (!_localmapHexKey) return;
+  const lm = state.localMaps[_localmapHexKey]; if (!lm || !lm.imageDataUrl) return;
+  if (!confirm('Remove the background image? The local map and pins will remain.')) return;
+  _pushMapUndo();
+  lm.imageDataUrl = null;
+  delete _localmapImgCache[_localmapHexKey];
+  save();
+  _drawLocalMap();
 }
 
 // ── Map — panel render ────────────────────────────────────────────────────────
@@ -5309,7 +5495,7 @@ function saveRelNoteModal() {
 }
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeRelNoteModal(); closeRelConfirmModal(); }
+  if (e.key === 'Escape') { closeLocalMap(); closeRelNoteModal(); closeRelConfirmModal(); }
 });
 
 document.addEventListener('keydown', e => {
