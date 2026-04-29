@@ -43,13 +43,15 @@
 ## Planned Patches / Features
 - Recolour Hex Title fonts for better visibility
 - Recolour roads for better visibility (add yellow border)
+- Double-click hex opens local map
 - Draw/Edit travel route
 - Route calculator finds shortest possible travel route WITHOUT going through impassable hexes
+- Route shown on map with dashed line by default -> "Mark Route on Map" button changes to "Save Route on Map"
 - Toggle explored filter in map mode (GM Only)
 - Player-facing version of map
 - Player-facing version of each tab
-- Move pins within hex from world-map view
 - Toggle local map pin visibility on world-map
+- Map Settings menu where terrain travel modifiers and other defaults can be edited
 - Port everything to web with live updating player-facing pages
 - Player forum
 

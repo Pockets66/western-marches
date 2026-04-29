@@ -652,6 +652,37 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
 .e-urgency-pill.medium.active   { border-color: var(--gold-dim); color: var(--gold-dim); }
 .e-urgency-pill.high.active     { border-color: #c07820; color: #c07820; }
 .e-urgency-pill.critical.active { border-color: var(--red); color: #e06060; background: rgba(154,32,32,0.1); }
+
+/* ── Quests ──────────────────────────────────────────────────────────────── */
+#panel-quests { flex-direction: column; align-items: stretch; overflow: hidden;
+  font-size: inherit; letter-spacing: normal; text-transform: none; color: var(--text); }
+.quests-pane { display: flex; flex: 1; overflow: hidden; align-items: stretch; min-height: 0; }
+.q-filter-bar { padding: 8px 10px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+.q-search { background: rgba(0,0,0,0.2); border: 1px solid var(--border); color: var(--text); font-family: 'Crimson Pro', Georgia, serif; font-size: 0.85rem; padding: 5px 8px; outline: none; width: 100%; }
+.q-search:focus { border-color: var(--gold-dim); }
+.q-search::placeholder { color: var(--text-muted); font-style: italic; }
+.q-known-btn { font-family: 'Cinzel', serif; font-size: 0.56rem; letter-spacing: 0.08em; text-transform: uppercase; padding: 4px 8px; border: 1px solid var(--border-lit); background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.15s; text-align: left; }
+.q-known-btn:hover { color: var(--text); border-color: var(--gold-dim); }
+.q-known-btn.active { border-color: var(--gold); color: var(--gold-pale); background: rgba(200,151,42,0.1); }
+.q-status-pills { display: flex; gap: 4px; flex-wrap: wrap; }
+.q-status-pill { font-family: 'Cinzel', serif; font-size: 0.54rem; letter-spacing: 0.07em; text-transform: uppercase; padding: 3px 8px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.15s; }
+.q-status-pill:hover { border-color: var(--border-lit); color: var(--text); }
+.q-status-pill.active { background: rgba(200,151,42,0.1); border-color: var(--gold-dim); color: var(--gold-pale); }
+.q-list-row { display: flex; align-items: center; gap: 8px; padding: 8px 14px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.04); transition: background 0.1s; }
+.q-list-row:hover { background: var(--panel-lite); }
+.q-list-row.active { background: rgba(200,151,42,0.1); border-left: 2px solid var(--gold-dim); padding-left: 12px; }
+.q-list-title { flex: 1; font-family: 'Crimson Pro', Georgia, serif; font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.q-urgency-pill { font-family: 'Cinzel', serif; font-size: 0.52rem; letter-spacing: 0.07em; text-transform: uppercase; padding: 2px 7px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.15s; }
+.q-urgency-pill:hover { color: var(--text); }
+.q-urgency-pill.low.active      { border-color: var(--text-dim); color: var(--text-dim); }
+.q-urgency-pill.medium.active   { border-color: var(--gold-dim); color: var(--gold-dim); }
+.q-urgency-pill.high.active     { border-color: #c07820; color: #c07820; }
+.q-urgency-pill.critical.active { border-color: var(--red); color: #e06060; background: rgba(154,32,32,0.1); }
+.q-detail-header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 16px 20px 12px; border-bottom: 1px solid var(--border); }
+.q-title-input { flex: 1 1 280px; font-family: 'Cinzel', serif; font-size: 1rem; letter-spacing: 0.06em; background: transparent; border: none; border-bottom: 1px solid var(--border); color: var(--text); padding: 4px 0; outline: none; min-width: 0; }
+.q-title-input:focus { border-bottom-color: var(--gold-dim); }
+.q-title-input::placeholder { color: var(--text-muted); font-style: italic; font-family: 'Crimson Pro', Georgia, serif; }
+
 .e-detail-header {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   padding: 16px 20px 12px; border-bottom: 1px solid var(--border);
@@ -1110,7 +1141,41 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
     </div>
   </div>
 
-  <div class="panel" id="panel-quests">[Quests]</div>
+  <div class="panel" id="panel-quests">
+    <div class="subtab-bar">
+      <button class="subtab-btn active" data-subtab="active"
+        onclick="switchQuestsSubtab('active')">Active</button>
+      <button class="subtab-btn" data-subtab="archive"
+        onclick="switchQuestsSubtab('archive')">Archive</button>
+    </div>
+    <div class="quests-pane" id="quests-pane">
+      <div class="sidebar">
+        <div class="sidebar-header">
+          <span>Quests</span>
+          <div style="display:flex;gap:8px;align-items:center">
+            <span id="q-count" style="color:var(--text-muted)">0</span>
+            <button class="btn-small" onclick="newQuest()">+ New</button>
+          </div>
+        </div>
+        <div class="q-filter-bar">
+          <div class="q-status-pills" id="q-status-pills"></div>
+          <input class="q-search" type="text" id="quest-search-inp"
+            placeholder="Search title, summary, notes…"
+            oninput="_questSearchChange(this.value)">
+          <button class="q-known-btn" id="quest-known-btn"
+            onclick="_questToggleKnown()">Player-known only</button>
+        </div>
+        <div class="sidebar-list" id="quest-list"></div>
+      </div>
+      <div class="f-content">
+        <div class="empty-state" id="quest-empty">
+          <div class="glyph">✦</div>
+          <p>Select a quest or create one to begin.</p>
+        </div>
+        <div id="quest-detail" class="hidden"></div>
+      </div>
+    </div>
+  </div>
 
   <div class="panel" id="panel-sessions">
     <div class="sidebar">
@@ -1332,6 +1397,9 @@ let state = {
     eventPlayerKnownOnly: false,
     rumorFilter:          '',
     questFilter:          '',
+    questsSubtab:         'active',
+    questStatusFilter:    '',
+    questPlayerKnownOnly: false,
     sessionFilter:        '',
     rulerHexA:            null,
     rulerHexB:            null,
@@ -1378,6 +1446,10 @@ function load() {
       if (state.ui && !('eventFactionFilter'     in state.ui)) state.ui.eventFactionFilter     = '';
       if (state.ui && !('eventUrgencyFilter'     in state.ui)) state.ui.eventUrgencyFilter     = '';
       if (state.ui && !('eventPlayerKnownOnly'   in state.ui)) state.ui.eventPlayerKnownOnly   = false;
+      if (state.ui && !('questsSubtab'         in state.ui)) state.ui.questsSubtab         = 'active';
+      if (state.ui && !('questStatusFilter'    in state.ui)) state.ui.questStatusFilter    = '';
+      if (state.ui && !('questPlayerKnownOnly' in state.ui)) state.ui.questPlayerKnownOnly = false;
+      if (state.ui && !('questFilter'          in state.ui)) state.ui.questFilter          = '';
       if (state.ui && !('rulerHexA'        in state.ui)) state.ui.rulerHexA        = null;
       if (state.ui && !('rulerHexB'        in state.ui)) state.ui.rulerHexB        = null;
       if (state.ui && !('rulerMove'        in state.ui)) state.ui.rulerMove        = 5;
@@ -1646,6 +1718,9 @@ function switchTab(tab) {
       const n = state.npcs.find(n => n.id === state.ui.activeNpcId);
       if (n) selectNpc(n.id);
     }
+  }
+  if (tab === 'quests') {
+    renderQuestsPanel();
   }
   if (tab === 'events') {
     renderEventsPanel();
@@ -4089,6 +4164,14 @@ function switchRumorsSubtab(sub) {
 
 const URGENCY_ORDER = { critical: 0, high: 1, medium: 2, low: 3 };
 
+const Q_STATUSES = [
+  { key: 'available', label: 'Available', color: 'var(--gold-pale)', group: 'active'  },
+  { key: 'active',    label: 'Active',    color: 'var(--gold)',      group: 'active'  },
+  { key: 'completed', label: 'Completed', color: '#7cbc80',          group: 'archive' },
+  { key: 'failed',    label: 'Failed',    color: '#e06060',          group: 'archive' },
+  { key: 'abandoned', label: 'Abandoned', color: 'var(--text-dim)',  group: 'archive' },
+];
+
 let _rumorSort = 'newest'; // 'newest' | 'urgency'
 
 function toggleRumorSort() {
@@ -4322,6 +4405,215 @@ function renderFactionSidebar() {
       <div class="threat-badge" style="border-color:${at.color};color:${at.color}">${at.label}</div>
     </div>`;
   }).join('');
+}
+
+// ── Quests ────────────────────────────────────────────────────────────────────
+
+function _questGroup(status) {
+  const s = Q_STATUSES.find(s => s.key === status);
+  return s ? s.group : 'active';
+}
+
+function newQuest() {
+  if (state.ui.questsSubtab !== 'active') switchQuestsSubtab('active');
+  const q = {
+    id: uid(), title: '', status: 'available', urgency: 'medium',
+    playerKnown: false, giverNpcId: null, factionId: null,
+    pinId: null, hexKey: null, summary: '', reward: '', notes: '',
+  };
+  state.quests.push(q);
+  state.ui.activeQuestId = q.id;
+  save(); renderQuestSidebar(); renderQuestDetail();
+  toast('New quest created.');
+}
+
+function deleteQuest(id) {
+  if (!confirm('Delete this quest? This cannot be undone.')) return;
+  state.events.forEach(e => { if (e.questId === id) e.questId = null; });
+  state.quests = state.quests.filter(q => q.id !== id);
+  if (state.ui.activeQuestId === id) state.ui.activeQuestId = null;
+  save(); renderQuestSidebar(); renderQuestDetail();
+  toast('Quest deleted.');
+}
+
+function selectQuest(id) {
+  state.ui.activeQuestId = id;
+  save(); renderQuestSidebar(); renderQuestDetail();
+}
+
+function updateQuestField(id, field, val) {
+  const q = state.quests.find(q => q.id === id); if (!q) return;
+  q[field] = val; save();
+}
+
+function setQuestStatus(id, status) {
+  const q = state.quests.find(q => q.id === id); if (!q) return;
+  const prevGroup = _questGroup(q.status);
+  const newGroup  = _questGroup(status);
+  q.status = status;
+  if (prevGroup !== newGroup && state.ui.activeQuestId === id) {
+    switchQuestsSubtab(newGroup);
+    toast(newGroup === 'archive' ? 'Moved to Archive.' : 'Restored from Archive.');
+  } else {
+    save(); renderQuestSidebar(); renderQuestDetail();
+  }
+}
+
+function setQuestUrgency(id, urgency) {
+  const q = state.quests.find(q => q.id === id); if (!q) return;
+  q.urgency = urgency; save(); renderQuestSidebar(); renderQuestDetail();
+}
+
+function toggleQuestKnown(id) {
+  const q = state.quests.find(q => q.id === id); if (!q) return;
+  q.playerKnown = !q.playerKnown; save(); renderQuestSidebar(); renderQuestDetail();
+}
+
+function switchQuestsSubtab(sub) {
+  state.ui.questsSubtab      = sub;
+  state.ui.questStatusFilter = '';
+  document.querySelectorAll('#panel-quests .subtab-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.subtab === sub));
+  save(); renderQuestStatusPills(); renderQuestSidebar();
+}
+
+function _questSearchChange(val) {
+  state.ui.questFilter = val; renderQuestSidebar();
+}
+
+function _questToggleKnown() {
+  state.ui.questPlayerKnownOnly = !state.ui.questPlayerKnownOnly;
+  const btn = document.getElementById('quest-known-btn');
+  if (btn) btn.classList.toggle('active', state.ui.questPlayerKnownOnly);
+  renderQuestSidebar();
+}
+
+function renderQuestStatusPills() {
+  const el = document.getElementById('q-status-pills'); if (!el) return;
+  const sub = state.ui.questsSubtab;
+  const cur = state.ui.questStatusFilter;
+  const statuses = Q_STATUSES.filter(s => s.group === sub);
+  el.innerHTML = `<button class="q-status-pill${cur === '' ? ' active' : ''}"
+      onclick="_questSetStatusFilter('')">All</button>` +
+    statuses.map(s => `<button class="q-status-pill${cur === s.key ? ' active' : ''}"
+        style="${cur === s.key ? `border-color:${s.color};color:${s.color}` : ''}"
+        onclick="_questSetStatusFilter('${s.key}')">${escHtml(s.label)}</button>`).join('');
+}
+
+function _questSetStatusFilter(key) {
+  state.ui.questStatusFilter = state.ui.questStatusFilter === key ? '' : key;
+  renderQuestStatusPills(); renderQuestSidebar();
+}
+
+function renderQuestSidebar() {
+  const sub    = state.ui.questsSubtab;
+  const filter = (state.ui.questFilter || '').toLowerCase();
+  const sf     = state.ui.questStatusFilter;
+  const knownOnly = state.ui.questPlayerKnownOnly;
+
+  let quests = (state.quests || []).filter(q => _questGroup(q.status) === sub);
+  if (sf)       quests = quests.filter(q => q.status === sf);
+  if (knownOnly) quests = quests.filter(q => q.playerKnown);
+  if (filter)   quests = quests.filter(q =>
+    (q.title   || '').toLowerCase().includes(filter) ||
+    (q.summary || '').toLowerCase().includes(filter) ||
+    (q.notes   || '').toLowerCase().includes(filter));
+
+  quests.sort((a, b) => {
+    const ud = (URGENCY_ORDER[a.urgency] ?? 2) - (URGENCY_ORDER[b.urgency] ?? 2);
+    if (ud !== 0) return ud;
+    return (a.title || '').localeCompare(b.title || '');
+  });
+
+  const cnt = document.getElementById('q-count');
+  if (cnt) cnt.textContent = quests.length;
+
+  const el = document.getElementById('quest-list'); if (!el) return;
+  if (!quests.length) {
+    el.innerHTML = '<div style="padding:16px;color:var(--text-muted);font-style:italic;font-size:0.85rem">No quests match these filters.</div>';
+    return;
+  }
+
+  const E_URGENCY_COLORS = { low: 'var(--text-dim)', medium: 'var(--gold-dim)', high: '#c07820', critical: 'var(--red)' };
+  el.innerHTML = quests.map(q => {
+    const st   = Q_STATUSES.find(s => s.key === q.status);
+    const isAct = state.ui.activeQuestId === q.id;
+    const urgDot = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${E_URGENCY_COLORS[q.urgency]||'var(--text-dim)'};flex-shrink:0"></span>`;
+    const stDot  = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${st?st.color:'var(--text-muted)'};flex-shrink:0" title="${st?st.label:''}"></span>`;
+    const lock   = q.playerKnown ? '' : `<span style="font-size:0.7rem;color:var(--text-muted)" title="Not player-known">🔒</span>`;
+    return `<div class="q-list-row${isAct?' active':''}" onclick="selectQuest('${q.id}')">
+      ${stDot}
+      <span class="q-list-title">${escHtml(q.title) || '<span style="color:var(--text-muted);font-style:italic">Untitled</span>'}</span>
+      ${urgDot}${lock}
+    </div>`;
+  }).join('');
+}
+
+function renderQuestDetail() {
+  const empty  = document.getElementById('quest-empty');
+  const detail = document.getElementById('quest-detail');
+  if (!detail) return;
+  const q = (state.quests || []).find(q => q.id === state.ui.activeQuestId);
+  if (!q) {
+    if (empty) empty.classList.remove('hidden');
+    detail.classList.add('hidden'); detail.innerHTML = '';
+    return;
+  }
+  if (empty) empty.classList.add('hidden');
+  detail.classList.remove('hidden');
+
+  const urgencyPills = ['low','medium','high','critical'].map(u =>
+    `<button class="q-urgency-pill ${u}${q.urgency===u?' active':''}"
+      onclick="setQuestUrgency('${q.id}','${u}')">${u.charAt(0).toUpperCase()+u.slice(1)}</button>`
+  ).join('');
+
+  const allStatusPills = Q_STATUSES.map(s =>
+    `<button class="q-status-pill${q.status===s.key?' active':''}"
+      style="${q.status===s.key?`border-color:${s.color};color:${s.color}`:''}"
+      onclick="setQuestStatus('${q.id}','${s.key}')">${escHtml(s.label)}</button>`
+  ).join('');
+
+  detail.innerHTML = `
+    <div style="max-width:860px">
+      <div class="q-detail-header">
+        <input class="q-title-input" value="${escHtml(q.title)}" placeholder="Quest title…"
+          oninput="updateQuestField('${q.id}','title',this.value)">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;font-size:0.82rem;white-space:nowrap">
+          <input type="checkbox" ${q.playerKnown?'checked':''} onchange="toggleQuestKnown('${q.id}')">
+          Player-known
+        </label>
+        <button class="btn-danger" style="margin-left:auto" onclick="deleteQuest('${q.id}')">Delete</button>
+      </div>
+      <div style="padding:14px 20px;display:flex;flex-direction:column;gap:14px">
+        <div>
+          <div class="map-info-lbl">Status</div>
+          <div class="q-status-pills" style="margin-top:4px">${allStatusPills}</div>
+        </div>
+        <div>
+          <div class="map-info-lbl">Urgency</div>
+          <div style="display:flex;gap:4px;margin-top:4px">${urgencyPills}</div>
+        </div>
+        <div>
+          <div class="map-info-lbl">Summary</div>
+          <textarea class="section-textarea" style="min-height:80px;margin-top:4px"
+            placeholder="What do the players know about this quest?"
+            oninput="updateQuestField('${q.id}','summary',this.value)">${escHtml(q.summary)}</textarea>
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderQuestsPanel() {
+  const sub = state.ui.questsSubtab || 'active';
+  document.querySelectorAll('#panel-quests .subtab-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.subtab === sub));
+  const inp = document.getElementById('quest-search-inp');
+  if (inp) inp.value = state.ui.questFilter || '';
+  const knownBtn = document.getElementById('quest-known-btn');
+  if (knownBtn) knownBtn.classList.toggle('active', !!state.ui.questPlayerKnownOnly);
+  renderQuestStatusPills();
+  renderQuestSidebar();
+  renderQuestDetail();
 }
 
 // ── Factions — CRUD ───────────────────────────────────────────────────────────
