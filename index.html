@@ -3091,6 +3091,7 @@ function _renderPinSection(c, r) {
             placeholder="Notes…"
             oninput="updatePinNotes('${pin.id}',this.value)" onblur="pinTextBlur()">${escHtml(pin.notes)}</textarea>
           ${_renderPinNpcRoster(pin)}
+          ${_renderPinQuestSection(pin)}
           <button class="map-action-btn" style="background:rgba(180,60,60,0.18);border-color:#c05050;color:#e08080"
             onclick="deletePin('${pin.id}',${c},${r})">Delete pin</button>
         </div>`;
@@ -3364,6 +3365,17 @@ function renderMapInfo(c, r) {
         oninput="updateMapHexField(${c},${r},'note',this.value)" onblur="mapHexFieldBlur()">${escHtml(hex.note)}</textarea>
     </div>
     <button class="map-save-btn" id="map-save-btn" onclick="mapSaveNoteFlash()">Save Note</button>
+    ${(() => {
+      const hexKey = c + ',' + r;
+      const hexPins = (state.pins||[]).filter(p => p.hexKey === hexKey);
+      const pinIds  = new Set(hexPins.map(p => p.id));
+      const count   = (state.quests||[]).filter(q =>
+        _questGroup(q.status) === 'active' &&
+        (q.hexKey === hexKey || (q.pinId && pinIds.has(q.pinId)))
+      ).length;
+      if (!count) return '';
+      return `<div onclick="goToTab('quests',{questsSubtab:'active'})" style="font-size:0.78rem;color:var(--gold-dim);cursor:pointer;padding:4px 0;text-decoration:underline;text-decoration-style:dotted">✦ ${count} quest${count>1?'s':''} anchored here</div>`;
+    })()}
     ${_renderPinSection(c, r)}
     ${_renderOverlayEditor(c, r, hex)}`;
 }
@@ -3919,6 +3931,7 @@ function _updateLmPinEditor() {
       placeholder="Notes…"
       oninput="updatePinNotes('${pin.id}',this.value)" onblur="pinTextBlur()">${escHtml(pin.notes)}</textarea>
     ${_renderPinNpcRoster(pin)}
+    ${_renderPinQuestSection(pin)}
     <button class="map-action-btn" style="background:rgba(180,60,60,0.18);border-color:#c05050;color:#e08080"
       onclick="lmDeletePin('${pin.id}')">Delete pin</button>`;
   ed.classList.remove('hidden');
@@ -4704,6 +4717,48 @@ function _renderQuestEventHistory(questId) {
   }).join('') + `<div style="font-size:0.75rem;color:var(--text-muted);margin-top:6px">To add an event, open the Events tab and link it to this quest from there.</div>`;
 }
 
+function _renderQuestReverseList(quests) {
+  const E_UC = { low: 'var(--text-dim)', medium: 'var(--gold-dim)', high: '#c07820', critical: 'var(--red)' };
+  const active = (quests || []).filter(q => _questGroup(q.status) === 'active');
+  if (!active.length) return `<p style="padding:8px 12px;color:var(--text-muted);font-style:italic;font-size:0.88rem">No active quests.</p>`;
+  return active.map(q => {
+    const st = Q_STATUSES.find(s => s.key === q.status);
+    const stDot  = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${st?st.color:'var(--text-muted)'};flex-shrink:0" title="${st?escHtml(st.label):''}"></span>`;
+    const urgDot = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${E_UC[q.urgency]||'var(--text-dim)'};flex-shrink:0"></span>`;
+    const titleHtml = q.title ? escHtml(q.title) : '<em style="color:var(--text-muted)">Untitled</em>';
+    return `<div onclick="goToTab('quests',{activeQuestId:'${q.id}',questsSubtab:'active'})"
+      style="display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.1s"
+      onmouseover="this.style.background='var(--panel-lite)'" onmouseout="this.style.background=''">
+      ${stDot}
+      <span style="flex:1;font-size:0.88rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${titleHtml}</span>
+      ${urgDot}
+    </div>`;
+  }).join('');
+}
+
+function _renderPinQuestSection(pin) {
+  const active = (state.quests||[]).filter(q => q.pinId === pin.id && _questGroup(q.status) === 'active');
+  if (!active.length) return '';
+  const E_UC = { low: 'var(--text-dim)', medium: 'var(--gold-dim)', high: '#c07820', critical: 'var(--red)' };
+  const rows = active.map(q => {
+    const st = Q_STATUSES.find(s => s.key === q.status);
+    const stDot = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${st?st.color:'var(--text-muted)'};flex-shrink:0"></span>`;
+    const urgDot = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${E_UC[q.urgency]||'var(--text-dim)'};flex-shrink:0"></span>`;
+    const titleHtml = q.title ? escHtml(q.title) : '<em style="color:var(--text-muted)">Untitled</em>';
+    return `<div onclick="goToTab('quests',{activeQuestId:'${q.id}',questsSubtab:'active'})"
+      style="display:flex;align-items:center;gap:6px;padding:3px 0;cursor:pointer"
+      onmouseover="this.style.opacity=0.7" onmouseout="this.style.opacity=1">
+      ${stDot}
+      <span style="flex:1;font-size:0.82rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${titleHtml}</span>
+      ${urgDot}
+    </div>`;
+  }).join('');
+  return `<div style="border-top:1px solid var(--border);padding-top:6px;display:flex;flex-direction:column;gap:4px">
+    <div class="map-info-lbl">Quests at this location</div>
+    ${rows}
+  </div>`;
+}
+
 function renderQuestDetail() {
   const empty  = document.getElementById('quest-empty');
   const detail = document.getElementById('quest-detail');
@@ -4786,18 +4841,30 @@ function renderQuestDetail() {
         <div style="display:flex;gap:12px;flex-wrap:wrap">
           <div style="flex:1;min-width:160px">
             <div class="map-info-lbl">Giver NPC</div>
-            <select style="${iSel};margin-top:4px" onchange="updateQuestField('${q.id}','giverNpcId',this.value||null)">${npcOpts}</select>
+            <div style="display:flex;gap:6px;align-items:center;margin-top:4px">
+              <select style="${iSel};flex:1" onchange="updateQuestField('${q.id}','giverNpcId',this.value||null)">${npcOpts}</select>
+              ${q.giverNpcId ? `<button class="btn-small" onclick="goToTab('npcs',{activeNpcId:'${q.giverNpcId}'})">→</button>` : ''}
+            </div>
           </div>
           <div style="flex:1;min-width:160px">
             <div class="map-info-lbl">Faction</div>
-            <select style="${iSel};margin-top:4px" onchange="setQuestFaction('${q.id}',this.value)">${factionOpts}</select>
+            <div style="display:flex;gap:6px;align-items:center;margin-top:4px">
+              <select style="${iSel};flex:1" onchange="setQuestFaction('${q.id}',this.value)">${factionOpts}</select>
+              ${q.factionId ? `<button class="btn-small" onclick="goToTab('factions',{activeFactionId:'${q.factionId}'})">→</button>` : ''}
+            </div>
           </div>
         </div>
         <div>
           <div class="map-info-lbl">Location</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
-            <select style="${iSel};flex:1;min-width:140px" onchange="setQuestPin('${q.id}',this.value)">${pinOpts}</select>
-            <select style="${iSel};flex:1;min-width:140px" onchange="setQuestHex('${q.id}',this.value)">${hexOpts}</select>
+            <div style="display:flex;gap:4px;align-items:center;flex:1;min-width:140px">
+              <select style="${iSel};flex:1" onchange="setQuestPin('${q.id}',this.value)">${pinOpts}</select>
+              ${q.pinId ? `<button class="btn-small" onclick="openLocalMapAtPin('${q.pinId}')">→</button>` : ''}
+            </div>
+            <div style="display:flex;gap:4px;align-items:center;flex:1;min-width:140px">
+              <select style="${iSel};flex:1" onchange="setQuestHex('${q.id}',this.value)">${hexOpts}</select>
+              ${q.hexKey ? `<button class="btn-small" onclick="goToHex('${q.hexKey}')">→</button>` : ''}
+            </div>
           </div>
           <div style="font-size:0.75rem;color:var(--text-muted);margin-top:3px;font-style:italic">Setting one location clears the other.</div>
         </div>
@@ -5213,6 +5280,11 @@ function renderFactionDetail(f) {
       <div class="section-box section-full">
         <div class="section-title">Locations</div>
         ${fPinRows}
+      </div>
+
+      <div class="section-box section-full">
+        <div class="section-title">Quests</div>
+        ${_renderQuestReverseList((state.quests||[]).filter(q => q.factionId === f.id))}
       </div>
     </div>
 
@@ -5792,6 +5864,10 @@ function renderNpcDetail(n) {
           <textarea class="npc-secrets-textarea"
             placeholder="What does this NPC know? (GM-only — never shown to players)"
             oninput="updateNpcField('${n.id}','secrets',this.value)">${escHtml(n.secrets)}</textarea>
+        </div>
+        <div class="section-box section-full">
+          <div class="section-title">Quests Offered</div>
+          ${_renderQuestReverseList((state.quests||[]).filter(q => q.giverNpcId === n.id))}
         </div>
         <div class="card-actions section-full">
           <button class="btn-danger" onclick="deleteNpc('${n.id}')">Delete NPC</button>
