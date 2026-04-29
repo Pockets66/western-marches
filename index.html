@@ -5523,6 +5523,24 @@ function _sNarrativeHTML(s) {
 
 // ── Sessions — Tagged lists ───────────────────────────────────────────────────
 
+function _sessionDatalistsHTML() {
+  const hexOpts = Object.entries(state.hexes || {})
+    .map(([k, h]) => `<option value="${escHtml(k)}">${h.name ? escHtml(k + ' · ' + h.name) : escHtml(k)}</option>`)
+    .join('');
+  const facOpts = (state.factions || [])
+    .map(f => `<option value="${escHtml(f.name || '')}"></option>`).join('');
+  const npcOpts = (state.npcs || [])
+    .map(n => `<option value="${escHtml(n.name || '')}"></option>`).join('');
+  const charOpts = [
+    ...(state.npcs    || []).map(n => n.name      || ''),
+    ...(state.players || []).map(p => p.character  || ''),
+  ].filter(Boolean).map(v => `<option value="${escHtml(v)}"></option>`).join('');
+  return `<datalist id="dl-sess-hexes">${hexOpts}</datalist>
+    <datalist id="dl-sess-factions">${facOpts}</datalist>
+    <datalist id="dl-sess-npcs">${npcOpts}</datalist>
+    <datalist id="dl-sess-chars">${charOpts}</datalist>`;
+}
+
 const _sTlistPH = {
   factionsEncountered: ['Faction or NPC…', 'NPC name…'],
   loot:                ['Item…',           'Notes…'],
@@ -5530,16 +5548,27 @@ const _sTlistPH = {
   misc:                ['Note…',           'Detail…'],
 };
 
+const _sTlistMainList = {
+  hexesVisited:        'dl-sess-hexes',
+  factionsEncountered: 'dl-sess-factions',
+  casualties:          'dl-sess-chars',
+};
+const _sTlistSubList = {
+  factionsEncountered: 'dl-sess-npcs',
+};
+
 function _sTlistRowHTML(sid, listName, i, item) {
-  const rmBtn = `<button class="btn-icon" onclick="removeListItem('${sid}','${listName}',${i})">✕</button>`;
+  const rmBtn   = `<button class="btn-icon" onclick="removeListItem('${sid}','${listName}',${i})">✕</button>`;
+  const mainDl  = _sTlistMainList[listName] ? ` list="${_sTlistMainList[listName]}"` : '';
+  const subDl   = _sTlistSubList[listName]  ? ` list="${_sTlistSubList[listName]}"` : '';
   if (typeof item === 'string') {
-    return `<input class="s-tlist-main" value="${escHtml(item)}" placeholder="Hex key or name…"
+    return `<input class="s-tlist-main" value="${escHtml(item)}" placeholder="Hex key or name…"${mainDl}
       oninput="updateListItem('${sid}','${listName}',${i},null,this.value)">${rmBtn}`;
   }
   const [pt, ps] = _sTlistPH[listName] || ['Entry…', 'Detail…'];
-  return `<input class="s-tlist-main" value="${escHtml(item.text)}" placeholder="${pt}"
+  return `<input class="s-tlist-main" value="${escHtml(item.text)}" placeholder="${pt}"${mainDl}
       oninput="updateListItem('${sid}','${listName}',${i},'text',this.value)">
-    <input class="s-tlist-sub" value="${escHtml(item.sub)}" placeholder="${ps}"
+    <input class="s-tlist-sub" value="${escHtml(item.sub)}" placeholder="${ps}"${subDl}
       oninput="updateListItem('${sid}','${listName}',${i},'sub',this.value)">${rmBtn}`;
 }
 
@@ -5554,7 +5583,7 @@ function _sTlistInner(s, listName) {
 }
 
 function _sTaggedListsHTML(s) {
-  return [
+  return _sessionDatalistsHTML() + [
     _sSec(s.id, 'tagged-hexes',      'Hexes Visited',              _sTlistInner(s, 'hexesVisited')),
     _sSec(s.id, 'tagged-factions',   'Factions & NPCs Encountered', _sTlistInner(s, 'factionsEncountered')),
     _sSec(s.id, 'tagged-loot',       'Loot',                       _sTlistInner(s, 'loot')),
