@@ -41,6 +41,7 @@
 - Spells sub-tab on character sheets (Tier 4, unmentioned so far)
 
 ## Planned Patches / Features
+- "Deceased" toggle for NPCs and players + Dead Character Archive ("Graveyard")
 - Recolour Hex Title fonts for better visibility
 - Recolour roads for better visibility (add yellow border)
 - Double-click hex opens local map

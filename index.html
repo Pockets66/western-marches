@@ -3001,6 +3001,16 @@ function togglePinDiscovered(id, c, r) {
   save(); drawWorld(); renderMapInfo(c, r);
 }
 
+function setPinFaction(id, val) {
+  const pin = state.pins.find(p => p.id === id); if (!pin) return;
+  _pushMapUndo();
+  pin.factionId = val || null;
+  _invalidatePinCache();
+  save(); drawWorld();
+  if (_mapSelHex) renderMapInfo(_mapSelHex.col, _mapSelHex.row);
+  if (_localmapHexKey) { _drawLocalMap(); _updateLmPinEditor(); }
+}
+
 function setPinField(id, field, val, c, r) {
   const pin = state.pins.find(p => p.id === id); if (!pin) return;
   _pushMapUndo();
@@ -3052,13 +3062,17 @@ function _renderPinSection(c, r) {
       const typeOpts    = PIN_TYPES.map(t => `<option value="${t.key}"${pin.type===t.key?' selected':''}>${t.label}</option>`).join('');
       const factionOpts = `<option value="">— none —</option>` +
         (state.factions || []).map(f => `<option value="${f.id}"${pin.factionId===f.id?' selected':''}>${escHtml(f.name)}</option>`).join('');
+      const facForDot = pin.factionId ? (state.factions||[]).find(f => f.id === pin.factionId) : null;
       editor = `
         <div style="background:var(--panel-dark);border:1px solid var(--border);border-radius:4px;padding:8px;display:flex;flex-direction:column;gap:6px;margin-top:2px">
           <input class="field-input" style="font-size:0.85rem" placeholder="Pin name…"
             value="${escHtml(pin.name)}"
             oninput="updatePinName('${pin.id}',this.value)" onblur="pinTextBlur()">
           <select style="${iSel}" onchange="setPinField('${pin.id}','type',this.value,${c},${r})">${typeOpts}</select>
-          <select style="${iSel}" onchange="setPinField('${pin.id}','factionId',this.value||null,${c},${r})">${factionOpts}</select>
+          <div style="display:flex;align-items:center;gap:6px">
+            <select style="${iSel};flex:1" onchange="setPinFaction('${pin.id}',this.value)">${factionOpts}</select>
+            ${facForDot ? `<div class="faction-dot" style="background:${escHtml(facForDot.color)}"></div>` : ''}
+          </div>
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;font-size:0.82rem">
             <input type="checkbox" ${pin.discovered ? 'checked' : ''}
               onchange="setPinField('${pin.id}','discovered',this.checked,${c},${r})">
@@ -3875,12 +3889,16 @@ function _updateLmPinEditor() {
   const typeOpts    = PIN_TYPES.map(t => `<option value="${t.key}"${pin.type===t.key?' selected':''}>${t.label}</option>`).join('');
   const factionOpts = `<option value="">— none —</option>` +
     (state.factions || []).map(f => `<option value="${f.id}"${pin.factionId===f.id?' selected':''}>${escHtml(f.name)}</option>`).join('');
+  const facForDot = pin.factionId ? (state.factions||[]).find(f => f.id === pin.factionId) : null;
   ed.innerHTML = `
     <input class="field-input" style="font-size:0.85rem" placeholder="Pin name…"
       value="${escHtml(pin.name)}"
       oninput="updatePinName('${pin.id}',this.value)" onblur="pinTextBlur()">
     <select style="${iSel}" onchange="lmSetPinField('${pin.id}','type',this.value)">${typeOpts}</select>
-    <select style="${iSel}" onchange="lmSetPinField('${pin.id}','factionId',this.value||null)">${factionOpts}</select>
+    <div style="display:flex;align-items:center;gap:6px">
+      <select style="${iSel};flex:1" onchange="setPinFaction('${pin.id}',this.value)">${factionOpts}</select>
+      ${facForDot ? `<div class="faction-dot" style="background:${escHtml(facForDot.color)}"></div>` : ''}
+    </div>
     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;font-size:0.82rem">
       <input type="checkbox" ${pin.discovered ? 'checked' : ''}
         onchange="lmSetPinField('${pin.id}','discovered',this.checked)">
