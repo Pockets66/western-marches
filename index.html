@@ -1032,8 +1032,6 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
 .st-status.st-dirty { color: var(--gold-pale); }
 .st-status.st-saved { color: var(--gold); }
 
-.st-file-debug { display: flex; gap: 6px; }
-
 .st-file-error {
   position: fixed; top: 0; left: 0; right: 0; z-index: 2000;
   background: #3a1414; border-bottom: 1px solid #8a2a2a; color: #f0c0c0;
@@ -1045,10 +1043,84 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
   padding: 4px 12px; background: transparent; border: 1px solid #c87070; color: #f0c0c0; cursor: pointer;
 }
 .st-file-error button:hover { background: rgba(200,112,112,0.15); }
+
+/* ── Launch screen ────────────────────────────────────────────────────────── */
+#launch-screen {
+  position: fixed; inset: 0; z-index: 500;
+  background: var(--panel);
+  display: flex; align-items: flex-start; justify-content: center;
+  overflow-y: auto; padding: 8vh 20px 40px;
+}
+#launch-screen.hidden { display: none; }
+#launch-screen::before {
+  content: '';
+  position: fixed; inset: 0;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(200,151,42,0.08) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 40% at 10% 90%, rgba(154,32,32,0.05) 0%, transparent 60%);
+  pointer-events: none;
+}
+.lc-card { position: relative; width: 100%; max-width: 560px; display: flex; flex-direction: column; gap: 20px; }
+.lc-title {
+  font-family: 'Cinzel', serif; font-weight: 900; font-size: 1.6rem;
+  letter-spacing: 0.15em; text-transform: uppercase; color: var(--gold);
+  text-align: center;
+}
+.lc-actions { display: flex; gap: 10px; justify-content: center; }
+.lc-btn {
+  font-family: 'Cinzel', serif; font-size: 0.72rem; letter-spacing: 0.1em;
+  text-transform: uppercase; padding: 10px 20px;
+  background: var(--gold-dim); border: 1px solid var(--gold); color: var(--gold-pale);
+  cursor: pointer; transition: all 0.15s;
+}
+.lc-btn:hover { background: var(--gold); color: #12100a; }
+.lc-btn-secondary { background: transparent; border: 1px solid var(--border-lit); color: var(--text-dim); }
+.lc-btn-secondary:hover { border-color: var(--gold-dim); color: var(--text); }
+.lc-import-card {
+  background: var(--panel-mid); border: 1px solid var(--gold-dim); padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.lc-import-card p { font-size: 0.9rem; color: var(--text-dim); line-height: 1.5; }
+.lc-section-title {
+  font-family: 'Cinzel', serif; font-size: 0.68rem; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--text-muted); margin-top: 6px;
+}
+.lc-recents { display: flex; flex-direction: column; gap: 6px; max-height: 42vh; overflow-y: auto; margin-top: 8px; }
+.lc-recent-row {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--panel-mid); border: 1px solid var(--border);
+  padding: 10px 12px; cursor: pointer; transition: all 0.15s;
+}
+.lc-recent-row:hover { border-color: var(--gold-dim); }
+.lc-recent-main { flex: 1; min-width: 0; }
+.lc-recent-name { font-family: 'Cinzel', serif; font-size: 0.85rem; color: var(--gold-pale); }
+.lc-recent-meta { font-size: 0.78rem; color: var(--text-muted); margin-top: 2px; }
+.lc-recent-forget {
+  background: transparent; border: none; color: var(--text-muted);
+  font-size: 1rem; cursor: pointer; padding: 4px 6px; line-height: 1; flex-shrink: 0;
+}
+.lc-recent-forget:hover { color: #c87070; }
+.lc-empty { text-align: center; color: var(--text-muted); font-style: italic; padding: 20px 0; }
 </style>
 </head>
 <body>
 
+<div id="launch-screen" class="hidden">
+  <div class="lc-card">
+    <div class="lc-title">Western Marches Tracker</div>
+    <div id="lc-import" class="hidden"></div>
+    <div class="lc-actions">
+      <button class="lc-btn" onclick="newCampaign()">New campaign…</button>
+      <button class="lc-btn lc-btn-secondary" onclick="openCampaign()">Open campaign…</button>
+    </div>
+    <div id="lc-recents-wrap" class="hidden">
+      <div class="lc-section-title">Recent Campaigns</div>
+      <div id="lc-recents" class="lc-recents"></div>
+    </div>
+  </div>
+</div>
+
+<div id="app-shell" class="hidden">
 <header>
   <h1>Western Marches</h1>
   <nav class="tab-bar">
@@ -1061,10 +1133,6 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
     <button class="tab-btn" data-tab="npcs">NPCs</button>
     <button class="tab-btn" data-tab="players">Players</button>
   </nav>
-  <div class="st-file-debug" id="st-file-debug">
-    <button class="btn-small" onclick="openCampaign()">Open</button>
-    <button class="btn-small" onclick="newCampaign()">New</button>
-  </div>
   <div class="st-status" id="st-status">Western Marches</div>
 </header>
 <div id="st-file-error" class="st-file-error hidden">
@@ -1277,6 +1345,7 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
     </div>
   </div>
 </div>
+</div><!-- /app-shell -->
 
 <!-- Map resize modal -->
 <div class="modal-overlay hidden" id="map-settings-modal">
@@ -1630,6 +1699,10 @@ async function _upsertHandleRecord(handle) {
 // ── Open / New campaign ──────────────────────────────────────────────────────
 
 function _fullRerender() {
+  const ls = document.getElementById('launch-screen');
+  const sh = document.getElementById('app-shell');
+  if (ls) ls.classList.add('hidden');
+  if (sh) sh.classList.remove('hidden');
   renderFactionSidebar();
   switchTab(state.ui.activeTab);
   if (state.ui.activeFactionId) {
@@ -1688,6 +1761,154 @@ async function newCampaign() {
   _hideFileErrorBanner();
   try { await saveNow(); } catch (e) { toast('Could not write the new campaign file.'); return; }
   await _upsertHandleRecord(handle);
+  _fullRerender();
+}
+
+// ── Launch screen (stage 3) ─────────────────────────────────────────────────
+
+function _relTime(ts) {
+  const diffMin = Math.floor((Date.now() - ts) / 60000);
+  if (diffMin < 1)  return 'just now';
+  if (diffMin < 60) return diffMin + ' minute' + (diffMin === 1 ? '' : 's') + ' ago';
+  const diffH = Math.floor(diffMin / 60);
+  if (diffH < 24) return diffH + ' hour' + (diffH === 1 ? '' : 's') + ' ago';
+  const diffD = Math.floor(diffH / 24);
+  if (diffD < 30) return diffD + ' day' + (diffD === 1 ? '' : 's') + ' ago';
+  const diffMo = Math.floor(diffD / 30);
+  if (diffMo < 12) return diffMo + ' month' + (diffMo === 1 ? '' : 's') + ' ago';
+  const diffY = Math.floor(diffMo / 12);
+  return diffY + ' year' + (diffY === 1 ? '' : 's') + ' ago';
+}
+
+function _legacyCampaignRaw() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && 'schemaVersion' in parsed) return parsed;
+  } catch (e) { /* not a usable legacy campaign */ }
+  return null;
+}
+
+async function boot() {
+  if (!_fsSupported()) {
+    load();
+    _fullRerender();
+    return;
+  }
+  let recents = [];
+  try { recents = await _idbGetAll(); } catch (e) { /* recents list is convenience only */ }
+  recents.sort((a, b) => b.lastOpened - a.lastOpened);
+  _renderLaunchScreen(recents);
+  const ls = document.getElementById('launch-screen');
+  if (ls) ls.classList.remove('hidden');
+}
+
+function _renderLaunchScreen(recents) {
+  const legacy = _legacyCampaignRaw();
+  const importEl = document.getElementById('lc-import');
+  if (legacy) {
+    importEl.classList.remove('hidden');
+    importEl.innerHTML = `
+      <div class="lc-import-card">
+        <div class="lc-section-title">Import existing campaign from browser storage</div>
+        <p>A campaign was found in this browser's local storage. Import it into a file to
+        keep working on it — the browser copy is left untouched.</p>
+        <div class="lc-actions">
+          <button class="lc-btn" onclick="_importLegacyCampaign()">Import…</button>
+        </div>
+      </div>`;
+  } else {
+    importEl.classList.add('hidden');
+    importEl.innerHTML = '';
+  }
+
+  const wrap = document.getElementById('lc-recents-wrap');
+  const list = document.getElementById('lc-recents');
+  if (!recents.length) {
+    wrap.classList.add('hidden');
+    list.innerHTML = '';
+    return;
+  }
+  wrap.classList.remove('hidden');
+  list.innerHTML = recents.map(r => `
+    <div class="lc-recent-row" onclick="_openRecent('${r.id}')">
+      <div class="lc-recent-main">
+        <div class="lc-recent-name">${escHtml(r.displayName)}</div>
+        <div class="lc-recent-meta">${escHtml(r.fileName)} · ${_relTime(r.lastOpened)}</div>
+      </div>
+      <button class="lc-recent-forget" title="Forget this recent (does not delete the file)"
+        onclick="event.stopPropagation(); _forgetRecent('${r.id}')">✕</button>
+    </div>`).join('');
+}
+
+async function _refreshLaunchScreen() {
+  let recents = [];
+  try { recents = await _idbGetAll(); } catch (e) { /* convenience only */ }
+  recents.sort((a, b) => b.lastOpened - a.lastOpened);
+  _renderLaunchScreen(recents);
+}
+
+async function _openRecent(id) {
+  let all = [];
+  try { all = await _idbGetAll(); } catch (e) { toast('Could not read recents.'); return; }
+  const rec = all.find(r => r.id === id);
+  if (!rec) return;
+  const ok = await _verifyPermission(rec.handle).catch(() => false);
+  if (!ok) { toast('Permission denied for that file.'); return; }
+  let parsed;
+  try {
+    const file = await rec.handle.getFile();
+    parsed = JSON.parse(await file.text());
+  } catch (e) {
+    toast("Couldn't find " + rec.fileName + '.');
+    if (confirm('Forget "' + rec.displayName + '" from your recents list? This does not delete anything on disk.')) {
+      try { await _idbDelete(rec.id); } catch (e2) { /* best effort */ }
+      _refreshLaunchScreen();
+    }
+    return;
+  }
+  _hydrate(parsed);
+  _fileHandle  = rec.handle;
+  _fileName    = rec.fileName;
+  _storeBackend = 'file';
+  _hideFileErrorBanner();
+  await _upsertHandleRecord(rec.handle);
+  _fullRerender();
+}
+
+async function _forgetRecent(id) {
+  let all = [];
+  try { all = await _idbGetAll(); } catch (e) { /* best effort */ }
+  const rec = all.find(r => r.id === id);
+  const label = rec ? rec.displayName : 'this campaign';
+  if (!confirm('Forget "' + label + '" from your recents list? This does not delete the file on disk.')) return;
+  try { await _idbDelete(id); } catch (e) { /* best effort */ }
+  _refreshLaunchScreen();
+}
+
+async function _importLegacyCampaign() {
+  const legacy = _legacyCampaignRaw();
+  if (!legacy || !_fsSupported()) return;
+  let handle;
+  try {
+    handle = await window.showSaveFilePicker({
+      suggestedName: 'campaign.json',
+      types: [{ description: 'Campaign JSON', accept: { 'application/json': ['.json'] } }],
+    });
+  } catch (e) {
+    return; // user cancelled the picker
+  }
+  const ok = await _verifyPermission(handle);
+  if (!ok) { toast('Permission denied for that file.'); return; }
+  _hydrate(legacy);
+  _fileHandle  = handle;
+  _fileName    = handle.name;
+  _storeBackend = 'file';
+  _hideFileErrorBanner();
+  try { await saveNow(); } catch (e) { toast('Could not write the campaign file.'); return; }
+  await _upsertHandleRecord(handle);
+  // localStorage[STORAGE_KEY] is intentionally left untouched as a safety net.
   _fullRerender();
 }
 
@@ -7795,17 +8016,7 @@ window._wmGraphTest = {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
-if (!_fsSupported()) {
-  const dbg = document.getElementById('st-file-debug');
-  if (dbg) dbg.classList.add('hidden');
-}
-load();
-renderFactionSidebar();
-switchTab(state.ui.activeTab);
-if (state.ui.activeFactionId) {
-  const f = state.factions.find(f => f.id === state.ui.activeFactionId);
-  if (f) renderFactionDetail(f);
-}
+boot();
 </script>
 </body>
 </html>
