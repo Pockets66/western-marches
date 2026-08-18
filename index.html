@@ -86,6 +86,11 @@ body::before {
     radial-gradient(ellipse 40% 40% at 10% 90%, rgba(154,32,32,0.04) 0%, transparent 60%);
   pointer-events: none; z-index: 0;
 }
+#app-shell {
+  display: flex; flex-direction: column;
+  flex: 1; min-height: 0;
+}
+#app-shell.hidden { display: none; }
 header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 12px 24px;
