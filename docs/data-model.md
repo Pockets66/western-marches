@@ -5,13 +5,80 @@ doc in the same commit as the code change.
 
 ## Storage
 
-All state lives in `localStorage` under one key: `wm_unified_v1`.
-On load, the app reads that key and hydrates a single in-memory `state` object.
-On every mutation, the app serializes `state` back to the same key.
+**Source of truth: a campaign `.json` file on disk** (slice 20.5), opened or
+created through the File System Access API and read/written via a
+`FileSystemFileHandle`. The serialized `state` shape is unchanged — a campaign
+file is byte-for-byte what `wm_unified_v1` used to hold. One file = one
+campaign; the app has no built-in notion of "the" campaign, only whichever
+file is currently open.
 
-The `v1` suffix is deliberate. If we ever need a breaking schema change, we write
-a migration from `wm_unified_v1` to `wm_unified_v2` rather than silently
-corrupting existing data.
+**Boot.** `boot()` is async. If the browser doesn't support the File System
+Access API (`'showOpenFilePicker' in window`), the app falls back permanently
+to the pre-slice-20.5 `localStorage`-only behavior and skips the launch screen
+entirely — never leave a browser with a dead app. Otherwise, `boot()` shows a
+launch screen: a list of recent campaigns (with an "Open campaign…" / "New
+campaign…" pair, and a one-time "import from browser storage" card if a
+legacy `localStorage` campaign is detected).
+
+**`save()` stays synchronous in signature.** Called from ~every mutation site.
+It marks state dirty and schedules a debounced flush — it does not write
+immediately and does not return a promise:
+- Debounce: 800ms after the last `save()` call.
+- Hard ceiling: a flush is forced at most 5s after the *first* dirty mark, so
+  continuous typing still saves periodically.
+- `saveNow()` exists for the handful of call sites that must block on a
+  completed write (e.g. `localMapUploadImage`'s quota-rollback check, and
+  switching/closing a campaign) — it cancels the pending timer, flushes
+  immediately, and returns a promise.
+
+**Flush destination** depends on `_storeBackend`:
+- `'file'` (the normal case once a campaign is open): writes via
+  `handle.createWritable()` → `write()` → `close()`. A write failure (e.g. a
+  revoked file permission) is loud — a persistent banner appears with a
+  "Reconnect" button that re-runs the permission check — because a silently
+  failed file write is the worst possible outcome. `localStorage` is also
+  written on every successful flush, but only as a **best-effort crash
+  mirror**: it is not read from except by the legacy-import path, and a
+  mirror write failure (e.g. quota) is silently swallowed.
+- `'local'` (only reachable pre-launch-screen, or when the File System Access
+  API is unsupported): `localStorage` under `wm_unified_v1` *is* the source of
+  truth, so a quota failure here propagates to the caller — this is what lets
+  `localMapUploadImage` still roll back a failed image upload.
+
+**Handle persistence.** A `FileSystemFileHandle` can't be JSON-serialized, so
+the launch screen's recents list is backed by IndexedDB, not `localStorage`:
+database `wm_store`, object store `wm_handles`, one record per recent
+campaign: `{ id, handle, displayName, fileName, lastOpened }`. `displayName`
+is derived from the filename (`frostmarch.json` → "Frostmarch") — there is no
+`state.meta.name` field. Records are deduplicated by
+`FileSystemFileHandle.isSameEntry()` so re-opening the same file doesn't
+create a second recent. Wiping IndexedDB only costs the convenience list —
+campaign content never touches it. Chrome requires a one-time
+`queryPermission`/`requestPermission` prompt per file per session
+(`_verifyPermission()`); the launch screen surfaces this as a single click.
+
+**Switching campaigns.** `switchCampaign()` flushes (`saveNow()`), tears down
+every module-local that would otherwise leak between campaigns — map undo/redo
+stacks, the active route selection, local-map image cache, pin/overlay render
+caches, sub-tab filters, and the open file handle — resets `state` to a fresh
+default, and returns to the launch screen. See `_teardownCampaign()` in
+`index.html` for the authoritative list; a leaked `_localmapImgCache` is the
+canonical footgun (one campaign's map art rendering on another's hexes).
+
+**Multi-tab / multi-window.** Two tabs (or windows) with the same file open is
+a last-write-wins footgun — there is no lock. Two *different* campaigns open
+in two windows is fine and is the intended way to run concurrent games.
+
+**Legacy import.** If `localStorage[wm_unified_v1]` holds a parseable
+campaign, the launch screen offers to import it: pick a destination file, run
+it through the same migration chain (`_hydrate()`) used everywhere else, write
+it, and open it. The `localStorage` copy is deliberately left in place as a
+safety net — nothing in this slice deletes it.
+
+The `v1` suffix on `wm_unified_v1` predates the file-backed model and is now
+just the crash-mirror key name; it carries no version-migration meaning of its
+own — schema versioning happens via `state.schemaVersion` and the
+`_hydrate()` chain below, identically regardless of storage backend.
 
 ## Migrations
 

@@ -27,6 +27,11 @@
 - Slice 17: Cross-link pass 1 (pin ↔ faction, pin ↔ NPCs)
 - Slice 18: Cross-link pass 2 (rumor ↔ pin/hex, NPC ↔ pin, session autocomplete)
 - Slice 19: Map fixes
+- Slice 20.5: File-backed campaign storage — localStorage replaced as source of
+  truth by File System Access API `.json` files, launch screen + recents
+  (IndexedDB handle store), debounced save with a save-status indicator,
+  campaign switching with full state reset, localStorage demoted to a
+  best-effort crash mirror
 
 ## Deferred
 

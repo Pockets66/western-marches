@@ -1133,6 +1133,7 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
     <button class="tab-btn" data-tab="npcs">NPCs</button>
     <button class="tab-btn" data-tab="players">Players</button>
   </nav>
+  <button class="btn-small" id="st-switch-btn" onclick="switchCampaign()">Switch Campaign</button>
   <div class="st-status" id="st-status">Western Marches</div>
 </header>
 <div id="st-file-error" class="st-file-error hidden">
@@ -1703,6 +1704,7 @@ function _fullRerender() {
   const sh = document.getElementById('app-shell');
   if (ls) ls.classList.add('hidden');
   if (sh) sh.classList.remove('hidden');
+  document.title = _fileName ? (_campaignName() + ' — Western Marches Tracker') : 'Western Marches Tracker';
   renderFactionSidebar();
   switchTab(state.ui.activeTab);
   if (state.ui.activeFactionId) {
@@ -1739,6 +1741,91 @@ async function openCampaign() {
   _hideFileErrorBanner();
   await _upsertHandleRecord(handle);
   _fullRerender();
+}
+
+// ── Switch campaign (stage 4) ────────────────────────────────────────────────
+
+async function switchCampaign() {
+  try {
+    await saveNow();
+  } catch (e) {
+    if (!confirm('Your last change may not have saved. Switch campaigns anyway?')) return;
+  }
+  _teardownCampaign();
+  const sh = document.getElementById('app-shell');
+  if (sh) sh.classList.add('hidden');
+  document.title = 'Western Marches Tracker';
+  await boot();
+}
+
+function _teardownCampaign() {
+  state = _defaultState();
+  _fileHandle   = null;
+  _fileName     = '';
+  _storeBackend = 'local';
+  _storeDirty   = false;
+  if (_storeFlushTimer) { clearTimeout(_storeFlushTimer); _storeFlushTimer = null; }
+  _hideFileErrorBanner();
+
+  // Map — module-locals that outlive `state`. _mapReady and _lmEventsAttached
+  // are one-time DOM-listener-attached guards, not campaign data — left alone.
+  _mapCurTerrain      = 'plains';
+  _mapCurMode         = 'select';
+  _mapRoadSurface     = 'dirt';
+  _mapIsDrag          = false;
+  _mapExploreIntent   = true;
+  _mapSelHex          = null;
+  _mapHoverHex        = null;
+  _mapRafId           = null;
+  _mapLastClickPx     = 0;
+  _mapLastClickPy     = 0;
+  _rulerPathSet       = null;
+  _rulerPath          = null;
+  _activeRouteRef     = null;
+  _mapDragLastHex     = null;
+  _mapDragLastAnchor  = null;
+  _mapDragOccurred    = false;
+  _mapDragType        = null;
+  _mapUndoStack       = [];
+  _mapRedoStack       = [];
+  if (_mapNameNoteTimer) { clearTimeout(_mapNameNoteTimer); _mapNameNoteTimer = null; }
+  _mapNameNoteLastKey = null;
+  _mapUndoTxnSnap     = null;
+  _invalidateOverlayCache();
+  _invalidatePinCache();
+
+  // Pins
+  _editingPinId = null;
+  if (_pinTextTimer) { clearTimeout(_pinTextTimer); _pinTextTimer = null; }
+  _pinTextLastKey = null;
+
+  // Local map — a leaked _localmapImgCache is the classic footgun (one
+  // campaign's map art rendering on another's hexes).
+  _localmapHexKey   = null;
+  _localmapImgCache = {};
+  _lmMode           = 'select';
+  _lmSelPinId       = null;
+  _lmDragPin        = null;
+  _lmDragOffX       = 0;
+  _lmDragOffY       = 0;
+  _lmDragMoved      = false;
+
+  // Sub-tab / filter view state
+  _rumorsSubtab   = 'active';
+  _rumorSort      = 'newest';
+  _factionsSubtab = 'detail';
+  _npcSearch      = '';
+  _npcFaction     = '';
+  _npcKnownOnly   = false;
+
+  // Relations UI
+  if (_relClickTimer) { clearTimeout(_relClickTimer); _relClickTimer = null; }
+  _relConfirmCb = null;
+  _relNoteKey   = null;
+
+  if (_toastTimer) { clearTimeout(_toastTimer); _toastTimer = null; }
+  const t = document.getElementById('toast');
+  if (t) t.classList.remove('show');
 }
 
 async function newCampaign() {
@@ -1792,6 +1879,8 @@ function _legacyCampaignRaw() {
 
 async function boot() {
   if (!_fsSupported()) {
+    const sw = document.getElementById('st-switch-btn');
+    if (sw) sw.classList.add('hidden');
     load();
     _fullRerender();
     return;
