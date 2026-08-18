@@ -1023,6 +1023,14 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
 }
 .toast.show { transform: translateY(0); opacity: 1; }
 .hidden { display: none !important; }
+
+/* ── Save status ──────────────────────────────────────────────────────────── */
+.st-status {
+  font-family: 'Cinzel', serif; font-size: 0.65rem; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--text-dim); transition: color 0.3s, opacity 0.3s;
+}
+.st-status.st-dirty { color: var(--gold-pale); }
+.st-status.st-saved { color: var(--gold); }
 </style>
 </head>
 <body>
@@ -1039,6 +1047,7 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
     <button class="tab-btn" data-tab="npcs">NPCs</button>
     <button class="tab-btn" data-tab="players">Players</button>
   </nav>
+  <div class="st-status" id="st-status">Western Marches</div>
 </header>
 
 <div class="panels">
@@ -1366,7 +1375,14 @@ function toast(msg) {
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
-const STORAGE_KEY = 'wm_unified_v1';
+const STORAGE_KEY = 'wm_unified_v1';   // retained: crash mirror only
+let   _storeDirty      = false;
+let   _storeFlushTimer = null;
+let   _storeFirstDirty = 0;
+const _STORE_DEBOUNCE_MS = 800;
+const _STORE_MAX_WAIT_MS = 5000;
+let   _storeBackend    = 'local';      // 'local' | 'file' — 'file' lands stage 2
+let   _storeStatusTimer = null;
 
 let state = {
   schemaVersion: 15,
@@ -1413,8 +1429,59 @@ function uid() {
 }
 
 function save() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  const now = Date.now();
+  if (!_storeDirty) _storeFirstDirty = now;
+  _storeDirty = true;
+  _setSaveStatus('dirty');
+  if (_storeFlushTimer) clearTimeout(_storeFlushTimer);
+  const wait = Math.min(_STORE_DEBOUNCE_MS, Math.max(0, _STORE_MAX_WAIT_MS - (now - _storeFirstDirty)));
+  _storeFlushTimer = setTimeout(_flush, wait);
 }
+
+function _flush() {
+  if (_storeFlushTimer) { clearTimeout(_storeFlushTimer); _storeFlushTimer = null; }
+  _storeDirty = false;
+  const json = JSON.stringify(state);
+  if (_storeBackend === 'file') {
+    // stage 2: file write is the source of truth; localStorage is a
+    // best-effort crash mirror only, so failure here is silent.
+    try { localStorage.setItem(STORAGE_KEY, json); } catch (e) { /* mirror only */ }
+  } else {
+    // no file backend yet — localStorage IS the source of truth, so a
+    // quota failure must propagate to the caller (e.g. image upload rollback).
+    localStorage.setItem(STORAGE_KEY, json);
+  }
+  _setSaveStatus('saved');
+}
+
+function saveNow() {
+  return Promise.resolve().then(_flush);
+}
+
+function _setSaveStatus(kind) {
+  const el = document.getElementById('st-status');
+  if (!el) return;
+  if (_storeStatusTimer) { clearTimeout(_storeStatusTimer); _storeStatusTimer = null; }
+  const campaignName = 'Western Marches';
+  if (kind === 'dirty') {
+    el.textContent = 'Saving…';
+    el.classList.remove('st-saved'); el.classList.add('st-dirty');
+  } else if (kind === 'saved') {
+    el.textContent = 'Saved ✓';
+    el.classList.remove('st-dirty'); el.classList.add('st-saved');
+    _storeStatusTimer = setTimeout(() => {
+      el.textContent = campaignName;
+      el.classList.remove('st-saved', 'st-dirty');
+    }, 1500);
+  } else {
+    el.textContent = campaignName;
+    el.classList.remove('st-dirty', 'st-saved');
+  }
+}
+
+window.addEventListener('beforeunload', () => {
+  if (_storeDirty) _flush();
+});
 
 function load() {
   const raw = localStorage.getItem(STORAGE_KEY);
@@ -4666,7 +4733,7 @@ function localMapUploadImage() {
     const file = e.target.files[0]; if (!file) return;
     const objUrl = URL.createObjectURL(file);
     const img = new Image();
-    img.onload = () => {
+    img.onload = async () => {
       URL.revokeObjectURL(objUrl);
       const MAX = 1600;
       let w = img.naturalWidth, h = img.naturalHeight;
@@ -4687,7 +4754,7 @@ function localMapUploadImage() {
       lm.height = h;
       delete _localmapImgCache[_localmapHexKey];
       try {
-        save();
+        await saveNow();
       } catch (err) {
         lm.imageDataUrl = prevDataUrl; lm.width = prevW; lm.height = prevH;
         delete _localmapImgCache[_localmapHexKey];
