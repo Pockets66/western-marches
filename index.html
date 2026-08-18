@@ -1803,8 +1803,9 @@ let _mapHoverHex   = null;
 let _mapReady      = false;
 let _mapRafId      = null;
 let _mapLastClickPx = 0, _mapLastClickPy = 0;
-let _rulerPathSet = null;
-let _rulerPath    = null;
+let _rulerPathSet     = null;
+let _rulerPath        = null;
+let _activeRouteRef   = null; // { hexKey, fromAnchor, toAnchor } | null
 const RULER_COLOR_A = '#00bcd4';
 const RULER_COLOR_B = '#e91e63';
 const ROAD_CONTINUITY_BONUS = 0.95;
@@ -2653,6 +2654,8 @@ function drawWorld() {
       }
     }
   }
+  // Selected route gold halo + endpoint outlines
+  _drawSelectedRouteHighlight(ctx);
   // Dashed live preview
   if (_rulerPath && _rulerPath.length >= 2) _drawRulerPreview(ctx, _rulerPath);
   // Ruler A (cyan) / B (magenta) outlines
@@ -2930,6 +2933,18 @@ function _initMapEvents() {
     _mapIsDrag = true;
     const { x, y } = cxy(e);
     _mapLastClickPx = x; _mapLastClickPy = y;
+    if (_mapCurMode === 'select') {
+      const _rHit = _hitTestRouteSegments(x, y);
+      if (_rHit) {
+        _mapSelHex = null; _activeRouteRef = _rHit;
+        renderRoutePanel(); drawWorld(); return;
+      }
+      if (_activeRouteRef) {
+        _activeRouteRef = null;
+        const _rp = document.getElementById('ruler-panel'); if (_rp) _rp.classList.add('hidden');
+        drawWorld();
+      }
+    }
     const h = pxToHex(x, y);
     if (!h) return;
     if (_mapCurMode === 'paintRoad' || _mapCurMode === 'paintRiver' || _mapCurMode === 'paintRoute') {
@@ -3847,6 +3862,7 @@ function toggleRulerMode() {
   if (_mapCurMode === 'rulerA' || _mapCurMode === 'rulerB') {
     hideRulerPanel();
   } else {
+    _activeRouteRef = null;
     state.ui.rulerHexA = null; state.ui.rulerHexB = null;
     const p = document.getElementById('ruler-panel'); if (p) p.classList.add('hidden');
     setMapMode('rulerA'); _buildMapToolbar(); drawWorld();
@@ -3889,27 +3905,207 @@ function saveRouteOnMap() {
   const move = state.ui.rulerMove || 5;
   const fp = _rulerPath || _dijkstraPath(aKey, bKey, move);
   if (!fp || fp.length < 2) { save(); drawWorld(); return; }
+  _savePathAsRoute(fp);
+  _invalidateOverlayCache(); save(); drawWorld();
+}
+
+// ── Route selection helpers ───────────────────────────────────────────────────
+
+function _distToSegment(px, py, ax, ay, bx, by) {
+  const dx=bx-ax, dy=by-ay, lenSq=dx*dx+dy*dy;
+  if (lenSq < 1e-9) return Math.hypot(px-ax, py-ay);
+  const t = Math.max(0, Math.min(1, ((px-ax)*dx+(py-ay)*dy)/lenSq));
+  return Math.hypot(px-(ax+t*dx), py-(ay+t*dy));
+}
+
+function _hitTestRouteSegments(px, py) {
+  const HIT = 8;
+  let bestD = HIT, bestRef = null;
+  Object.entries(state.hexes).forEach(([hexKey, hex]) => {
+    const ov = (hex.overlays||[]).find(o => o.type === 'route');
+    if (!ov || !(ov.segments||[]).length) return;
+    const [c, r] = hexKey.split(',').map(Number);
+    for (const seg of ov.segments) {
+      const pA = anchorPointWithOffset(c, r, seg.from, 'route');
+      const pB = anchorPointWithOffset(c, r, seg.to,   'route');
+      const d = _distToSegment(px, py, pA.x, pA.y, pB.x, pB.y);
+      if (d < bestD) { bestD = d; bestRef = { hexKey, fromAnchor: seg.from, toAnchor: seg.to }; }
+    }
+  });
+  return bestRef;
+}
+
+function _routeRunFromRef(ref) {
+  if (!ref) return null;
+  const graph = buildOverlayGraph('route');
+  if (!graph.nodes.size) return null;
+  const runs = findRuns(graph);
+  const seedA = `${ref.hexKey}|${ref.fromAnchor}`, seedB = `${ref.hexKey}|${ref.toAnchor}`;
+  for (const run of runs) {
+    if (run.some(nk => nk === seedA || nk === seedB)) return { run, graph };
+  }
+  return null;
+}
+
+function _runToPathKeys(run) {
+  const hexKeys = run.map(nk => nk.split('|')[0]);
+  const d = [hexKeys[0]];
+  for (let i = 1; i < hexKeys.length; i++) if (hexKeys[i] !== d[d.length-1]) d.push(hexKeys[i]);
+  return d;
+}
+
+function _routeEndpointHexKeys(run, graph) {
+  const deg = new Map();
+  graph.nodes.forEach((_, k) => deg.set(k, 0));
+  graph.edges.forEach(e => { deg.set(e.a,(deg.get(e.a)||0)+1); deg.set(e.b,(deg.get(e.b)||0)+1); });
+  const ends = [...new Set(run.filter(k=>(deg.get(k)||0)===1).map(k=>k.split('|')[0]))].sort();
+  return ends; // [hexKeyA (cyan), hexKeyB (magenta)] by lex order
+}
+
+function _deleteRouteRun(run, graph) {
+  const toDelete = new Set();
+  for (let i = 0; i < run.length - 1; i++) {
+    const a = run[i], b = run[i+1];
+    graph.edges.forEach((e, ei) => { if (e.hexKey && ((e.a===a&&e.b===b)||(e.a===b&&e.b===a))) toDelete.add(ei); });
+  }
+  toDelete.forEach(ei => {
+    const e = graph.edges[ei], [c,r] = e.hexKey.split(',').map(Number);
+    _removeOverlaySegment(getHex(c,r), 'route', e.segment.from, e.segment.to);
+  });
+}
+
+function _drawSelectedRouteHighlight(ctx) {
+  if (!_activeRouteRef) return;
+  const res = _routeRunFromRef(_activeRouteRef);
+  if (!res) return;
+  const { run, graph } = res;
+  if (!run || run.length < 2) return;
+  const { hexSize } = state.mapMeta;
+  ctx.save();
+  ctx.setLineDash([]); ctx.strokeStyle = '#c8972a'; ctx.lineWidth = 7; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.beginPath();
+  for (let i = 0; i < run.length; i++) {
+    const nd = graph.nodes.get(run[i]); if (!nd) continue;
+    if (i === 0) ctx.moveTo(nd.x, nd.y); else ctx.lineTo(nd.x, nd.y);
+  }
+  ctx.stroke();
+  const ends = _routeEndpointHexKeys(run, graph);
+  [[ends[0], RULER_COLOR_A],[ends[1], RULER_COLOR_B]].forEach(([hk, col]) => {
+    if (!hk) return;
+    const [hc,hr] = hk.split(',').map(Number);
+    const {x:hx,y:hy} = hexCenter(hc,hr);
+    const hpts = hexCorners(hx,hy,hexSize-1);
+    ctx.beginPath(); ctx.moveTo(hpts[0].x,hpts[0].y);
+    for (let i=1;i<6;i++) ctx.lineTo(hpts[i].x,hpts[i].y);
+    ctx.closePath(); ctx.strokeStyle=col; ctx.lineWidth=3; ctx.stroke();
+  });
+  ctx.restore();
+}
+
+function _savePathAsRoute(fp) {
+  const move = state.ui.rulerMove || 5;
   const last = fp.length - 1;
   fp.forEach((h, i) => {
-    const hex = getHex(h.col, h.row);
-    const key = h.col + ',' + h.row;
-    // Derive entry/exit anchors from path adjacency
-    let eIn = 'C', eOut = 'C';
-    if (i > 0)    { const p=fp[i-1]; const e=_sharedEdge({col:h.col,row:h.row},{col:p.col,row:p.row}); eIn  = e===-1?'C':e; }
-    if (i < last) { const n=fp[i+1]; const e=_sharedEdge({col:h.col,row:h.row},{col:n.col,row:n.row}); eOut = e===-1?'C':e; }
+    const hex = getHex(h.col, h.row), key = h.col+','+h.row;
+    let eIn='C', eOut='C';
+    if (i>0)    { const p=fp[i-1]; const e=_sharedEdge({col:h.col,row:h.row},{col:p.col,row:p.row}); eIn  = e===-1?'C':e; }
+    if (i<last) { const n=fp[i+1]; const e=_sharedEdge({col:h.col,row:h.row},{col:n.col,row:n.row}); eOut = e===-1?'C':e; }
     if (eIn === eOut) return;
-    // Use road segment chain when the route benefited from the road bonus in this hex
     const { usedRoadBonus } = costForHexInPath(hex, eIn, eOut, key, move);
     if (usedRoadBonus) {
-      const roadSegs = roadPathInHex(hex, eIn, eOut);
-      if (roadSegs && roadSegs.length > 0) {
-        roadSegs.forEach(seg => _addOverlaySegment(hex, 'route', seg.from, seg.to));
-        return;
-      }
+      const rs = roadPathInHex(hex, eIn, eOut);
+      if (rs && rs.length > 0) { rs.forEach(seg => _addOverlaySegment(hex,'route',seg.from,seg.to)); return; }
     }
     _addOverlaySegment(hex, 'route', eIn, eOut);
   });
+}
+
+function renderRoutePanel() {
+  const panel = document.getElementById('ruler-panel');
+  if (!panel || !_activeRouteRef) return;
+  const res = _routeRunFromRef(_activeRouteRef);
+  if (!res) { panel.classList.add('hidden'); return; }
+  const { run, graph } = res;
+  const pathKeys = _runToPathKeys(run);
+  const move = state.ui.rulerMove || 5;
+  const savedOvr = state.ui.rulerOverrides; state.ui.rulerOverrides = {};
+  const { days, perHex } = daysForPath(pathKeys, move);
+  state.ui.rulerOverrides = savedOvr;
+  const ends = _routeEndpointHexKeys(run, graph);
+  const hexLabel = k => { const [c,r]=k.split(',').map(Number),h=state.hexes[k]; return (h&&h.name)?escHtml(h.name):'('+c+','+r+')'; };
+  const N = pathKeys.length - 1;
+  const daysStr = N === 0 ? '0 days' : formatDays(days);
+  const btnSty = 'flex:1;padding:5px;font-family:Cinzel,serif;font-size:0.7rem;letter-spacing:0.06em;cursor:pointer;border-radius:3px';
+  const rowsHtml = perHex.slice(1).map(({key, modifier:m, totalDays, crossings, lakePenalty, usedRoadBonus, hasRoadNoBonus, isImpassable}) => {
+    const [kc,kr]=key.split(',').map(Number), h=state.hexes[key];
+    const tLbl = usedRoadBonus ? 'road' : ((h&&h.terrain)||'unknown');
+    const bypass = hasRoadNoBonus ? ' <span style="color:var(--text-dim);font-size:0.7rem" title="road bypassed">(road)</span>' : '';
+    const rTag = crossings>0 ? ' <span style="color:#e8a040;font-size:0.7rem">(+R×'+crossings+')</span>' : '';
+    const lTag = lakePenalty>0 ? ' <span style="color:#6ab0d4;font-size:0.7rem">(+L)</span>' : '';
+    return '<tr'+(isImpassable?' class="r-water"':'')+'>'+
+      '<td>('+kc+','+kr+')</td><td>'+escHtml(tLbl)+bypass+'</td>'+
+      '<td>'+(isImpassable?'—':m.toFixed(2))+'</td>'+
+      '<td>'+(isImpassable?'&#x26A0;':totalDays.toFixed(2))+rTag+lTag+'</td></tr>';
+  }).join('');
+  panel.innerHTML = `
+    <div class="r-panel-header">
+      <div class="r-panel-title">Selected Route</div>
+      <button onclick="clearRouteSelection()" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:1.1rem;padding:0;line-height:1">&#x2715;</button>
+    </div>
+    <div class="r-row"><span class="r-label">From</span><span class="r-val">${ends[0]?hexLabel(ends[0]):'—'}</span></div>
+    <div class="r-row"><span class="r-label">To</span><span class="r-val">${ends[1]?hexLabel(ends[1]):'—'}</span></div>
+    <div class="r-row" style="margin-top:6px;border-top:1px solid var(--border);padding-top:6px">
+      <span class="r-label">Distance</span><span class="r-val">${N} hex${N!==1?'es':''} (${N*5} mi)</span>
+    </div>
+    <div class="r-row"><span class="r-label">Total days</span><span class="r-val">${daysStr}</span></div>
+    <div style="display:flex;gap:6px;margin-top:8px">
+      <button onclick="recomputeSelectedRoute()" style="${btnSty};background:rgba(0,188,212,0.12);border:1px solid rgba(0,188,212,0.35);color:#00bcd4">↺ Recompute</button>
+      <button onclick="deleteSelectedRoute()"   style="${btnSty};background:rgba(160,40,40,0.12);border:1px solid rgba(160,40,40,0.35);color:#c87070">✕ Delete</button>
+    </div>
+    <table class="r-table" style="margin-top:10px">
+      <thead><tr><th>Hex</th><th>Terrain</th><th>Mod</th><th>Days</th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>`;
+  panel.classList.remove('hidden');
+}
+
+function clearRouteSelection() {
+  _activeRouteRef = null;
+  const rp = document.getElementById('ruler-panel'); if (rp) rp.classList.add('hidden');
+  drawWorld();
+}
+
+function deleteSelectedRoute() {
+  if (!_activeRouteRef) return;
+  const res = _routeRunFromRef(_activeRouteRef);
+  if (res) { _pushMapUndo(); _deleteRouteRun(res.run, res.graph); }
+  _activeRouteRef = null;
   _invalidateOverlayCache(); save(); drawWorld();
+  const rp = document.getElementById('ruler-panel'); if (rp) rp.classList.add('hidden');
+}
+
+function recomputeSelectedRoute() {
+  if (!_activeRouteRef) return;
+  const res = _routeRunFromRef(_activeRouteRef);
+  if (!res) return;
+  const ends = _routeEndpointHexKeys(res.run, res.graph);
+  if (ends.length < 2) return;
+  _pushMapUndo();
+  _deleteRouteRun(res.run, res.graph);
+  const move = state.ui.rulerMove || 5;
+  const fp = _dijkstraPath(ends[0], ends[1], move);
+  if (fp && fp.length >= 2) {
+    _savePathAsRoute(fp);
+    const fh = state.hexes[fp[0].col+','+fp[0].row];
+    const fov = fh && (fh.overlays||[]).find(o=>o.type==='route');
+    if (fov && (fov.segments||[]).length > 0) {
+      const s = fov.segments[0];
+      _activeRouteRef = { hexKey: fp[0].col+','+fp[0].row, fromAnchor: s.from, toAnchor: s.to };
+    }
+  } else { _activeRouteRef = null; }
+  _invalidateOverlayCache(); save(); drawWorld();
+  if (_activeRouteRef) renderRoutePanel();
+  else { const rp=document.getElementById('ruler-panel'); if(rp) rp.classList.add('hidden'); }
 }
 
 function renderRulerPanel() {
@@ -4880,6 +5076,19 @@ function newQuest() {
   state.ui.activeQuestId = q.id;
   save(); renderQuestSidebar(); renderQuestDetail();
   toast('New quest created.');
+}
+
+function newQuestForNpc(npcId) {
+  const q = {
+    id: uid(), title: '', status: 'available', urgency: 'medium',
+    playerKnown: false, giverNpcId: npcId, factionId: null,
+    pinId: null, hexKey: null, summary: '', reward: '', notes: '',
+  };
+  state.quests.push(q);
+  state.ui.activeQuestId = q.id;
+  if (state.ui.questsSubtab !== 'active') state.ui.questsSubtab = 'active';
+  save();
+  goToTab('quests');
 }
 
 function deleteQuest(id) {
@@ -6048,7 +6257,7 @@ function newNpcAtPin(pinId) {
   };
   state.npcs.push(n);
   save();
-  goToTab('npcs', { activeNpcId: n.id });
+  _navFromPin('npcs', { activeNpcId: n.id });
 }
 
 function _renderPinNpcRoster(pin) {
@@ -6243,7 +6452,10 @@ function renderNpcDetail(n) {
             oninput="updateNpcField('${n.id}','secrets',this.value)">${escHtml(n.secrets)}</textarea>
         </div>
         <div class="section-box section-full">
-          <div class="section-title">Quests Offered</div>
+          <div class="section-title" style="display:flex;align-items:center;justify-content:space-between">
+            <span>Quests Offered</span>
+            <button class="btn-small" onclick="newQuestForNpc('${n.id}')">+ New quest</button>
+          </div>
           ${_renderQuestReverseList((state.quests||[]).filter(q => q.giverNpcId === n.id))}
         </div>
         <div class="card-actions section-full">
