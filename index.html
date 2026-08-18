@@ -1031,6 +1031,20 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
 }
 .st-status.st-dirty { color: var(--gold-pale); }
 .st-status.st-saved { color: var(--gold); }
+
+.st-file-debug { display: flex; gap: 6px; }
+
+.st-file-error {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 2000;
+  background: #3a1414; border-bottom: 1px solid #8a2a2a; color: #f0c0c0;
+  font-family: 'Cinzel', serif; font-size: 0.72rem; letter-spacing: 0.05em;
+  padding: 8px 16px; display: flex; align-items: center; justify-content: center; gap: 16px;
+}
+.st-file-error button {
+  font-family: 'Cinzel', serif; font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 4px 12px; background: transparent; border: 1px solid #c87070; color: #f0c0c0; cursor: pointer;
+}
+.st-file-error button:hover { background: rgba(200,112,112,0.15); }
 </style>
 </head>
 <body>
@@ -1047,8 +1061,16 @@ table.rel-table th, table.rel-table td { border: 1px solid var(--border); paddin
     <button class="tab-btn" data-tab="npcs">NPCs</button>
     <button class="tab-btn" data-tab="players">Players</button>
   </nav>
+  <div class="st-file-debug" id="st-file-debug">
+    <button class="btn-small" onclick="openCampaign()">Open</button>
+    <button class="btn-small" onclick="newCampaign()">New</button>
+  </div>
   <div class="st-status" id="st-status">Western Marches</div>
 </header>
+<div id="st-file-error" class="st-file-error hidden">
+  <span id="st-file-error-msg"></span>
+  <button onclick="_reconnectFile()">Reconnect</button>
+</div>
 
 <div class="panels">
   <div class="panel" id="panel-map">
@@ -1384,7 +1406,8 @@ const _STORE_MAX_WAIT_MS = 5000;
 let   _storeBackend    = 'local';      // 'local' | 'file' — 'file' lands stage 2
 let   _storeStatusTimer = null;
 
-let state = {
+function _defaultState() {
+  return {
   schemaVersion: 15,
   factions:  [],
   npcs:      [],
@@ -1422,7 +1445,10 @@ let state = {
     rulerMove:            5,
     rulerOverrides:       {},
   },
-};
+  };
+}
+
+let state = _defaultState();
 
 function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -1438,13 +1464,22 @@ function save() {
   _storeFlushTimer = setTimeout(_flush, wait);
 }
 
-function _flush() {
+async function _flush() {
   if (_storeFlushTimer) { clearTimeout(_storeFlushTimer); _storeFlushTimer = null; }
   _storeDirty = false;
   const json = JSON.stringify(state);
   if (_storeBackend === 'file') {
-    // stage 2: file write is the source of truth; localStorage is a
-    // best-effort crash mirror only, so failure here is silent.
+    // file write is the source of truth; a failure here must be loud.
+    try {
+      const writable = await _fileHandle.createWritable();
+      await writable.write(json);
+      await writable.close();
+      _hideFileErrorBanner();
+    } catch (e) {
+      _showFileErrorBanner();
+      throw e;
+    }
+    // localStorage is a best-effort crash mirror only — failure here is silent.
     try { localStorage.setItem(STORAGE_KEY, json); } catch (e) { /* mirror only */ }
   } else {
     // no file backend yet — localStorage IS the source of truth, so a
@@ -1458,11 +1493,15 @@ function saveNow() {
   return Promise.resolve().then(_flush);
 }
 
+function _campaignName() {
+  return _fileName ? _fileName.replace(/\.json$/i, '') : 'Western Marches';
+}
+
 function _setSaveStatus(kind) {
   const el = document.getElementById('st-status');
   if (!el) return;
   if (_storeStatusTimer) { clearTimeout(_storeStatusTimer); _storeStatusTimer = null; }
-  const campaignName = 'Western Marches';
+  const campaignName = _campaignName();
   if (kind === 'dirty') {
     el.textContent = 'Saving…';
     el.classList.remove('st-saved'); el.classList.add('st-dirty');
@@ -1483,68 +1522,240 @@ window.addEventListener('beforeunload', () => {
   if (_storeDirty) _flush();
 });
 
+// ── File backend (stage 2) ──────────────────────────────────────────────────
+
+let _fileHandle = null;   // FileSystemFileHandle | null
+let _fileName    = '';    // e.g. "frostmarch.json"
+
+function _fsSupported() {
+  return 'showOpenFilePicker' in window;
+}
+
+function _showFileErrorBanner() {
+  const el = document.getElementById('st-file-error');
+  const msg = document.getElementById('st-file-error-msg');
+  if (!el || !msg) return;
+  msg.textContent = 'Could not write to ' + (_fileName || 'file') + ' — your changes are unsaved.';
+  el.classList.remove('hidden');
+}
+
+function _hideFileErrorBanner() {
+  const el = document.getElementById('st-file-error');
+  if (el) el.classList.add('hidden');
+}
+
+async function _reconnectFile() {
+  if (!_fileHandle) return;
+  const ok = await _verifyPermission(_fileHandle);
+  if (!ok) { toast('Still no permission to write that file.'); return; }
+  _hideFileErrorBanner();
+  save();
+  try { await saveNow(); } catch (e) { /* banner already re-shown by _flush */ }
+}
+
+async function _verifyPermission(handle) {
+  const opts = { mode: 'readwrite' };
+  if ((await handle.queryPermission(opts)) === 'granted') return true;
+  if ((await handle.requestPermission(opts)) === 'granted') return true;
+  return false;
+}
+
+// ── IndexedDB handle store ──────────────────────────────────────────────────
+
+const IDB_DB_NAME    = 'wm_store';
+const IDB_STORE_NAME = 'wm_handles';
+
+function _idbOpen() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(IDB_STORE_NAME)) {
+        db.createObjectStore(IDB_STORE_NAME, { keyPath: 'id' });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror   = () => reject(req.error);
+  });
+}
+
+async function _idbPut(record) {
+  const db = await _idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE_NAME, 'readwrite');
+    tx.objectStore(IDB_STORE_NAME).put(record);
+    tx.oncomplete = () => resolve();
+    tx.onerror    = () => reject(tx.error);
+  });
+}
+
+async function _idbGetAll() {
+  const db = await _idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx  = db.transaction(IDB_STORE_NAME, 'readonly');
+    const req = tx.objectStore(IDB_STORE_NAME).getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror   = () => reject(req.error);
+  });
+}
+
+async function _idbDelete(id) {
+  const db = await _idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE_NAME, 'readwrite');
+    tx.objectStore(IDB_STORE_NAME).delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror    = () => reject(tx.error);
+  });
+}
+
+async function _upsertHandleRecord(handle) {
+  let existingId = null;
+  try {
+    const all = await _idbGetAll();
+    for (const rec of all) {
+      try { if (await rec.handle.isSameEntry(handle)) { existingId = rec.id; break; } } catch (e) { /* stale handle */ }
+    }
+  } catch (e) { /* recents list is convenience only */ }
+  const record = {
+    id:          existingId || uid(),
+    handle:      handle,
+    displayName: handle.name.replace(/\.json$/i, ''),
+    fileName:    handle.name,
+    lastOpened:  Date.now(),
+  };
+  try { await _idbPut(record); } catch (e) { /* recents list is convenience only */ }
+}
+
+// ── Open / New campaign ──────────────────────────────────────────────────────
+
+function _fullRerender() {
+  renderFactionSidebar();
+  switchTab(state.ui.activeTab);
+  if (state.ui.activeFactionId) {
+    const f = state.factions.find(f => f.id === state.ui.activeFactionId);
+    if (f) renderFactionDetail(f);
+  }
+  _setSaveStatus('idle');
+}
+
+async function openCampaign() {
+  if (!_fsSupported()) return;
+  let handle;
+  try {
+    [handle] = await window.showOpenFilePicker({
+      types: [{ description: 'Campaign JSON', accept: { 'application/json': ['.json'] } }],
+    });
+  } catch (e) {
+    return; // user cancelled the picker
+  }
+  const ok = await _verifyPermission(handle);
+  if (!ok) { toast('Permission denied for that file.'); return; }
+  let parsed;
+  try {
+    const file = await handle.getFile();
+    parsed = JSON.parse(await file.text());
+  } catch (e) {
+    toast('Could not read that file.');
+    return;
+  }
+  _hydrate(parsed);
+  _fileHandle  = handle;
+  _fileName    = handle.name;
+  _storeBackend = 'file';
+  _hideFileErrorBanner();
+  await _upsertHandleRecord(handle);
+  _fullRerender();
+}
+
+async function newCampaign() {
+  if (!_fsSupported()) return;
+  let handle;
+  try {
+    handle = await window.showSaveFilePicker({
+      suggestedName: 'campaign.json',
+      types: [{ description: 'Campaign JSON', accept: { 'application/json': ['.json'] } }],
+    });
+  } catch (e) {
+    return; // user cancelled the picker
+  }
+  const ok = await _verifyPermission(handle);
+  if (!ok) { toast('Permission denied for that file.'); return; }
+  state = _defaultState();
+  _fileHandle  = handle;
+  _fileName    = handle.name;
+  _storeBackend = 'file';
+  _hideFileErrorBanner();
+  try { await saveNow(); } catch (e) { toast('Could not write the new campaign file.'); return; }
+  await _upsertHandleRecord(handle);
+  _fullRerender();
+}
+
+function _hydrate(parsed) {
+  const v = parsed.schemaVersion || 1;
+  if (v > 15) return;
+  if (v < 2) migrateFactions(parsed);
+  if (v < 3) migrateToV3(parsed);
+  if (v < 4) migrateToV4(parsed);
+  if (v < 5) migrateToV5(parsed);
+  if (v < 6) migrateToV6(parsed);
+  if (v < 7) migrateToV7(parsed);
+  if (v < 8) migrateToV8(parsed);
+  if (v < 9) migrateToV9(parsed);
+  if (v < 10) migrateToV10(parsed);
+  if (v < 11) migrateToV11(parsed);
+  if (v < 12) migrateToV12(parsed);
+  if (v < 13) migrateToV13(parsed);
+  if (v < 14) migrateToV14(parsed);
+  if (v < 15) migrateToV15(parsed);
+  state = parsed;
+  if (!state.localMaps || typeof state.localMaps !== 'object') state.localMaps = {};
+  if (!Array.isArray(state.pins)) state.pins = [];
+  if (state.ui && state.ui.activeTab === 'relations') state.ui.activeTab = 'factions';
+  if (state.ui && !('activeSessionId'        in state.ui)) state.ui.activeSessionId        = null;
+  if (state.ui && !('activeEventId'          in state.ui)) state.ui.activeEventId          = null;
+  if (state.ui && !('eventFilter'            in state.ui)) state.ui.eventFilter            = '';
+  if (state.ui && !('eventFactionFilter'     in state.ui)) state.ui.eventFactionFilter     = '';
+  if (state.ui && !('eventUrgencyFilter'     in state.ui)) state.ui.eventUrgencyFilter     = '';
+  if (state.ui && !('eventPlayerKnownOnly'   in state.ui)) state.ui.eventPlayerKnownOnly   = false;
+  if (state.ui && !('questsSubtab'         in state.ui)) state.ui.questsSubtab         = 'active';
+  if (state.ui && !('questStatusFilter'    in state.ui)) state.ui.questStatusFilter    = '';
+  if (state.ui && !('questPlayerKnownOnly' in state.ui)) state.ui.questPlayerKnownOnly = false;
+  if (state.ui && !('questFilter'          in state.ui)) state.ui.questFilter          = '';
+  if (state.ui && !('rulerHexA'        in state.ui)) state.ui.rulerHexA        = null;
+  if (state.ui && !('rulerHexB'        in state.ui)) state.ui.rulerHexB        = null;
+  if (state.ui && !('rulerMove'        in state.ui)) state.ui.rulerMove        = 5;
+  if (state.ui && !('rulerOverrides'   in state.ui)) state.ui.rulerOverrides   = {};
+  // Null out dangling single-ref event links so dropdowns show “— none —” for orphaned refs
+  (state.events || []).forEach(e => {
+    if (e.questId   && !(state.quests   || []).find(q => q.id  === e.questId))   e.questId   = null;
+    if (e.sessionId && !(state.sessions || []).find(s => s.id === e.sessionId)) e.sessionId = null;
+  });
+  (state.sessions || []).forEach(s => {
+    if (!('title'    in s)) s.title    = '';
+    if (!('date'     in s)) s.date     = '';
+    if (!('playerVisible' in s)) s.playerVisible = false;
+    if (!s.attendance || typeof s.attendance !== 'object') s.attendance = {};
+    if (!Array.isArray(s.hooks))               s.hooks               = [];
+    if (!('planned'  in s)) s.planned  = '';
+    if (!('actual'   in s)) s.actual   = '';
+    if (!('location' in s)) s.location = '';
+    if (!('report'   in s)) s.report   = '';
+    if (!('gmNotes'  in s)) s.gmNotes  = '';
+    if (!Array.isArray(s.hexesVisited))        s.hexesVisited        = [];
+    if (!Array.isArray(s.factionsEncountered)) s.factionsEncountered = [];
+    if (!Array.isArray(s.loot))                s.loot                = [];
+    if (!Array.isArray(s.casualties))          s.casualties          = [];
+    if (!Array.isArray(s.misc))                s.misc                = [];
+  });
+}
+
 function load() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) return;
   try {
     const parsed = JSON.parse(raw);
-    const v = parsed.schemaVersion || 1;
-    if (v <= 15) {
-      if (v < 2) migrateFactions(parsed);
-      if (v < 3) migrateToV3(parsed);
-      if (v < 4) migrateToV4(parsed);
-      if (v < 5) migrateToV5(parsed);
-      if (v < 6) migrateToV6(parsed);
-      if (v < 7) migrateToV7(parsed);
-      if (v < 8) migrateToV8(parsed);
-      if (v < 9) migrateToV9(parsed);
-      if (v < 10) migrateToV10(parsed);
-      if (v < 11) migrateToV11(parsed);
-      if (v < 12) migrateToV12(parsed);
-      if (v < 13) migrateToV13(parsed);
-      if (v < 14) migrateToV14(parsed);
-      if (v < 15) migrateToV15(parsed);
-      state = parsed;
-      if (!state.localMaps || typeof state.localMaps !== 'object') state.localMaps = {};
-      if (!Array.isArray(state.pins)) state.pins = [];
-      if (state.ui && state.ui.activeTab === 'relations') state.ui.activeTab = 'factions';
-      if (state.ui && !('activeSessionId'        in state.ui)) state.ui.activeSessionId        = null;
-      if (state.ui && !('activeEventId'          in state.ui)) state.ui.activeEventId          = null;
-      if (state.ui && !('eventFilter'            in state.ui)) state.ui.eventFilter            = '';
-      if (state.ui && !('eventFactionFilter'     in state.ui)) state.ui.eventFactionFilter     = '';
-      if (state.ui && !('eventUrgencyFilter'     in state.ui)) state.ui.eventUrgencyFilter     = '';
-      if (state.ui && !('eventPlayerKnownOnly'   in state.ui)) state.ui.eventPlayerKnownOnly   = false;
-      if (state.ui && !('questsSubtab'         in state.ui)) state.ui.questsSubtab         = 'active';
-      if (state.ui && !('questStatusFilter'    in state.ui)) state.ui.questStatusFilter    = '';
-      if (state.ui && !('questPlayerKnownOnly' in state.ui)) state.ui.questPlayerKnownOnly = false;
-      if (state.ui && !('questFilter'          in state.ui)) state.ui.questFilter          = '';
-      if (state.ui && !('rulerHexA'        in state.ui)) state.ui.rulerHexA        = null;
-      if (state.ui && !('rulerHexB'        in state.ui)) state.ui.rulerHexB        = null;
-      if (state.ui && !('rulerMove'        in state.ui)) state.ui.rulerMove        = 5;
-      if (state.ui && !('rulerOverrides'   in state.ui)) state.ui.rulerOverrides   = {};
-      // Null out dangling single-ref event links so dropdowns show “— none —” for orphaned refs
-      (state.events || []).forEach(e => {
-        if (e.questId   && !(state.quests   || []).find(q => q.id  === e.questId))   e.questId   = null;
-        if (e.sessionId && !(state.sessions || []).find(s => s.id === e.sessionId)) e.sessionId = null;
-      });
-      (state.sessions || []).forEach(s => {
-        if (!('title'    in s)) s.title    = '';
-        if (!('date'     in s)) s.date     = '';
-        if (!('playerVisible' in s)) s.playerVisible = false;
-        if (!s.attendance || typeof s.attendance !== 'object') s.attendance = {};
-        if (!Array.isArray(s.hooks))               s.hooks               = [];
-        if (!('planned'  in s)) s.planned  = '';
-        if (!('actual'   in s)) s.actual   = '';
-        if (!('location' in s)) s.location = '';
-        if (!('report'   in s)) s.report   = '';
-        if (!('gmNotes'  in s)) s.gmNotes  = '';
-        if (!Array.isArray(s.hexesVisited))        s.hexesVisited        = [];
-        if (!Array.isArray(s.factionsEncountered)) s.factionsEncountered = [];
-        if (!Array.isArray(s.loot))                s.loot                = [];
-        if (!Array.isArray(s.casualties))          s.casualties          = [];
-        if (!Array.isArray(s.misc))                s.misc                = [];
-      });
-    }
+    _hydrate(parsed);
   } catch (e) {
     console.warn('wm: failed to parse saved state', e);
   }
@@ -7584,6 +7795,10 @@ window._wmGraphTest = {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
+if (!_fsSupported()) {
+  const dbg = document.getElementById('st-file-debug');
+  if (dbg) dbg.classList.add('hidden');
+}
 load();
 renderFactionSidebar();
 switchTab(state.ui.activeTab);
